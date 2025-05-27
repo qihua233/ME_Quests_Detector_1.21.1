@@ -3,28 +3,21 @@ package io.z23illucia.ae2_ftbquest_detector.blockentity;
 
 import appeng.api.networking.*;
 
-import appeng.api.networking.crafting.ICraftingWatcherNode;
 import appeng.api.networking.storage.IStorageWatcherNode;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
-import dev.architectury.hooks.level.entity.PlayerHooks;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import dev.ftb.mods.ftbquests.util.FTBQuestsInventoryListener;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
-import dev.ftb.mods.ftbteams.api.property.TeamProperty;
-import dev.ftb.mods.ftbteams.api.property.TeamPropertyType;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
@@ -35,7 +28,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.nbt.CompoundTag;
 import org.jetbrains.annotations.Nullable;
 
-import dev.ftb.mods.ftbquests.quest.Quest;
 
 import java.util.*;
 
@@ -111,7 +103,6 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
         FTBTeamsAPI.api().getManager().getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
                 {
                     ownerTeamId = team.getId();
-                    TeamBlockBindingHelper.addBoundBlock(ownerTeamId, (ServerLevel) level,getBlockPos());
                 }
                 );
 
@@ -154,9 +145,9 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
     public void onLoad() {
         if (!nodeInitialized && level instanceof ServerLevel serverLevel) {
             nodeInitialized = true;
-
             managedGridNode.create(serverLevel, this.getBlockPos());
             //Node.
+            DetectorEntityList.register(this);
             System.out.println(managedGridNode.isActive());
         }
 
@@ -165,10 +156,8 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
     @Override
     public void setRemoved() {
         super.setRemoved();
+        DetectorEntityList.unregister(this);
         managedGridNode.destroy();
-        if (ownerTeamId != null && !level.isClientSide) {
-            TeamBlockBindingHelper.removeBoundBlock(ownerTeamId, (ServerLevel) level,getBlockPos());
-        }
     }
 
     @Override
@@ -195,28 +184,5 @@ class DetectorBlockEntityListener implements IGridNodeListener<DetectorBlockEnti
         // send node owner to clients
     }
 
-}
-
-class MyTeamProperties {
-    public static final TeamProperty<List<BoundBlock>> BOUND_BLOCKS =
-            new TeamProperty<List<BoundBlock>>(
-                    new ResourceLocation("aeftbquests", "bound_blocks"),
-                    () -> new ArrayList<>()
-            ) {
-                @Override
-                public TeamPropertyType<List<BoundBlock>> getType() {
-                    return null;
-                }
-
-                @Override
-                public Optional<List<BoundBlock>> fromString(String s) {
-                    return Optional.empty();
-                }
-
-                @Override
-                public void write(FriendlyByteBuf friendlyByteBuf) {
-
-                }
-            };
 }
 
