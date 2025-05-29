@@ -5,7 +5,10 @@
   "compatibilityLevel": "JAVA_8",
   "refmap": "ae2_ftbquest_detector.refmap.json",
   "mixins": [
-    "ItemTaskMixin"
+    "FluidTaskMixin",
+    "FluidTaskMixinAccessor",
+    "ItemTaskMixin",
+    "TaskMixin"
   ],
   "client": [
   ],

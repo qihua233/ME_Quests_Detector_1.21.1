@@ -7,8 +7,10 @@ import appeng.api.networking.storage.IStorageWatcherNode;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
+import dev.architectury.fluid.FluidStack;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
+import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
@@ -121,6 +123,11 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
                 TeamData data = file.getNullableTeamData(ownerTeamId);
                 if (data != null && !data.isLocked()) {
                     for (Task task : tasksToCheck) {
+                        if(task instanceof FluidTask && data.canStartTasks(task.getQuest()))
+                        {
+                            System.out.println("fluid task detected");
+
+                        }
                         if (task instanceof ItemTask && data.canStartTasks(task.getQuest())) {
                             long c = Math.min(task.getMaxProgress(), item.getCount());
                             if (c > data.getProgress(task)) {
