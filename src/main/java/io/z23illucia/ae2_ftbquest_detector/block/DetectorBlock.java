@@ -3,9 +3,17 @@ package io.z23illucia.ae2_ftbquest_detector.block;
 
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
+import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
+import dev.ftb.mods.ftbquests.quest.TeamData;
+import dev.ftb.mods.ftbteams.FTBTeams;
+import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
+import dev.ftb.mods.ftbteams.api.Team;
+import dev.ftb.mods.ftbteams.api.TeamManager;
 import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -27,6 +35,8 @@ import net.minecraft.world.phys.BlockHitResult;
 import org.apache.commons.lang3.ObjectUtils;
 
 import javax.annotation.Nullable;
+import java.util.Optional;
+
 
 public class DetectorBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
@@ -66,32 +76,57 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (be instanceof DetectorBlockEntity detector) {
             var node = detector.getGridNode(null);
             if (node == null || !node.isPowered()) {
-                serverPlayer.sendSystemMessage(Component.literal("[Detector] 未连接到 AE 网络"));
-                return InteractionResult.SUCCESS;
+//                player.displayClientMessage(
+//                        Component.translatable("ae2-ftbquests-detector.detector.uncharged"),
+//                        true
+//                );
+                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                        Component.translatable("ae2-ftbquests-detector.detector.uncharged")
+                ));
+
+            }
+            else if(detector.ownerTeamId == null)
+            {
+                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                        Component.translatable("ae2-ftbquests-detector.detector.no_owner")
+                ));
+            }
+            else
+            {
+                try {
+                    Optional<Team> optionalTeam = FTBTeamsAPI
+                            .api()
+                            .getManager()
+                            .getTeamByID(detector.ownerTeamId);
+                    optionalTeam.ifPresentOrElse(team -> {
+                        ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                                Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString())
+                        ));
+
+                        for(var entry : node.getGrid().getStorageService().getInventory().getAvailableStacks()){
+                            var key = entry.getKey();
+                            var num = entry.getLongValue();
+                            detector.detectTask(key, num);
+                        }
+
+                    }, () -> {
+                        ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                                Component.translatable("ae2-ftbquests-detector.detector.invalid_owner")
+                        ));
+
+                    });
+                }
+                catch (Exception e)
+                {
+                    ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                            Component.translatable("ae2-ftbquests-detector.detector.invalid_owner"))
+                    );
+                }
+
+
+
             }
 
-            var grid = node.getGrid();
-            var s = grid.getStorageService();
-            var items = s.getInventory();
-
-            for(var entry : items.getAvailableStacks()){
-                var key = entry.getKey();
-                if(key instanceof AEItemKey itemKey){
-                    ItemStack stack = itemKey.toStack();
-                    long count = entry.getLongValue();
-
-                    serverPlayer.sendSystemMessage(Component.literal(
-                            "- " + count + "x " + stack.getDisplayName().getString()
-                    ));
-                }
-                else if(key instanceof AEFluidKey fluidKey){
-
-                    long amount = entry.getLongValue();
-                    var fluidStack = fluidKey.toStack((int)amount).getDisplayName();// 转换为 FluidStack
-
-                    serverPlayer.sendSystemMessage(Component.literal("- " + amount + " mb x ").append(fluidStack));
-                }
-            }
         }
         return InteractionResult.SUCCESS;
     }

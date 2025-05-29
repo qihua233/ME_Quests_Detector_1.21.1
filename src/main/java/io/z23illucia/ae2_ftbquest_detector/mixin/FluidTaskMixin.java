@@ -28,7 +28,7 @@ public class FluidTaskMixin implements IFluidTaskExtension {
     @Inject(method = "<init>", at = @At("TAIL"))
     private void onInit(long id, Quest quest, CallbackInfo ci) {
         this.consumeFluid = Tristate.TRUE;
-        System.out.println("初始化");
+
     }
 
     // 💉 注入构造函数，在构造后标记 isModified

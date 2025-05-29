@@ -73,29 +73,30 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
 
     @Override
     public void onStackChange(AEKey key, long l) {
-        var players = level.getEntitiesOfClass(
-                Player.class,
-                new AABB(this.getBlockPos()).inflate(100)
-        );
-
-        MutableComponent msg = null;
-        if(key instanceof AEItemKey itemKey){
-            ItemStack stack = itemKey.toStack();
-            stack.setCount((int)l);
-            msg = Component.literal(
-                    "- " + stack.getCount() + "x " + stack.getDisplayName().getString()
-            );
-            for (Player p : players)
-            {
-                p.sendSystemMessage(Component.literal("storage change"));
-                p.sendSystemMessage(msg);
-                detectTask(stack);
-            }
-        }
-        else if(key instanceof AEFluidKey fluidKey){
-            var fluidStack = fluidKey.toStack((int)l).getDisplayName();
-            msg = Component.literal("- " + l + " mb x ").append(fluidStack);
-        }
+        detectTask(key, l);
+//        var players = level.getEntitiesOfClass(
+//                Player.class,
+//                new AABB(this.getBlockPos()).inflate(100)
+//        );
+//
+//        MutableComponent msg = null;
+//        if(key instanceof AEItemKey itemKey){
+//            ItemStack stack = itemKey.toStack();
+//            stack.setCount((int)l);
+//            msg = Component.literal(
+//                    "- " + stack.getCount() + "x " + stack.getDisplayName().getString()
+//            );
+//            for (Player p : players)
+//            {
+//                p.sendSystemMessage(Component.literal("storage change"));
+//                p.sendSystemMessage(msg);
+//                detectTask(stack);
+//            }
+//        }
+//        else if(key instanceof AEFluidKey fluidKey){
+//            var fluidStack = fluidKey.toStack((int)l).getDisplayName();
+//            msg = Component.literal("- " + l + " mb x ").append(fluidStack);
+//        }
 
     }
 
@@ -115,7 +116,7 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
         super(ModBlockEntities.DETECTOR_BLOCK_ENTITY.get(), pos, state);
     }
 
-    public void detectTask(ItemStack item) {
+    public void detectTask(AEKey key, long num) {
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file != null) {
             List<Task> tasksToCheck =file.getSubmitTasks();
@@ -123,13 +124,27 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
                 TeamData data = file.getNullableTeamData(ownerTeamId);
                 if (data != null && !data.isLocked()) {
                     for (Task task : tasksToCheck) {
-                        if(task instanceof FluidTask && data.canStartTasks(task.getQuest()))
+                        if(data.canStartTasks(task.getQuest())
+                                && task instanceof FluidTask fluidTask
+                                && key instanceof AEFluidKey fluidKey
+                                && (fluidTask.getFluid() == fluidKey.getFluid())
+                        )
                         {
-                            System.out.println("fluid task detected");
+                            long c = Math.min(task.getMaxProgress(), num);
+                            //System.out.println(task.getMaxProgress());
+                            //System.out.println(num);
+                            //System.out.println(data.getProgress(task));
+                            if (c > data.getProgress(task)) {
+                                data.setProgress(task, c);
+                            }
 
                         }
-                        if (task instanceof ItemTask && data.canStartTasks(task.getQuest())) {
-                            long c = Math.min(task.getMaxProgress(), item.getCount());
+                        else if ( data.canStartTasks(task.getQuest())
+                                && task instanceof ItemTask itemTask
+                                && key instanceof AEItemKey itemKey
+                                && itemTask.test(itemKey.toStack())
+                        ) {
+                            long c = Math.min(task.getMaxProgress(), num);
                             if (c > data.getProgress(task)) {
                                 data.setProgress(task, c);
                             }

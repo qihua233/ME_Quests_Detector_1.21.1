@@ -6,6 +6,7 @@ import dev.ftb.mods.ftbquests.item.MissingItem;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
+import io.z23illucia.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,53 +34,11 @@ public class ItemTaskMixin {
         if(self.consumesResources()
                 && !teamData.isCompleted(self)
                 && !self.isTaskScreenOnly()
-                && !teamData.isCompleted(self)
                 && !(self.getItemStack().getItem() instanceof MissingItem)
-                && !(craftedItem.getItem() instanceof MissingItem)
         )
-
         {
             //System.out.println("consume注入点");
-            for(var e: DetectorEntityList.getAll())
-            {
-                //System.out.println(e.getBlockPos());
-                if(e.ownerTeamId.equals(teamData.getTeamId()))
-                {
-                    var Inventory = e.getGridNode(null).getGrid().getStorageService().getInventory();
-                    for(var entry : Inventory.getAvailableStacks()) {
-                        var key = entry.getKey();
-
-                        if(key instanceof AEItemKey itemKey){
-                            ItemStack stack = itemKey.toStack();
-                            stack.setCount((int) entry.getLongValue());
-                            long extrable = Inventory.extract(key,
-                                    stack.getCount(),
-                                    Actionable.SIMULATE,
-                                    IActionSource.ofPlayer(player)
-                            );
-                            stack.setCount((int) extrable);
-                            //System.out.println("real"+stack.getCount());
-                            ItemStack stack1 = self.insert(teamData, stack, false);
-                            //System.out.println("left"+stack1.getCount());
-                            if (stack.getCount() != stack1.getCount()) {
-                                try {
-                                    Inventory.extract(key,
-                                            stack.getCount() - stack1.getCount(),
-                                            Actionable.MODULATE,
-                                            IActionSource.ofPlayer(player)
-                                    );
-                                    System.out.println("!!!!!!"+stack.getCount()+"  "+stack1.getCount());
-                                } catch (Exception err) {
-                                    System.err.println("[Mixin Error] submitTask 注入失败！");
-                                    err.printStackTrace();
-                                }
-
-                            }
-                        }
-                    }
-                }
-
-            }
+            SubmitHelper.submitTask(teamData, player, self);
 
         }
 

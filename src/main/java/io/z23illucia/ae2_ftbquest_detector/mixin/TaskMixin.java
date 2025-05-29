@@ -1,9 +1,11 @@
 package io.z23illucia.ae2_ftbquest_detector.mixin;
 
+import dev.ftb.mods.ftbquests.item.MissingItem;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import io.z23illucia.ae2_ftbquest_detector.utility.IFluidTaskExtension;
+import io.z23illucia.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -22,24 +24,14 @@ public class TaskMixin {
             remap = false
     )
     private void injectSubmitFluidTask(TeamData teamData, ServerPlayer player, ItemStack craftedItem, CallbackInfo ci) {
-        System.out.println("submit mixin");
         Task thisTask = (Task) (Object) this;
-        if(thisTask instanceof FluidTask self)
+        if(thisTask instanceof FluidTask self
+                && !teamData.isCompleted(self)
+                && self.consumesResources()
+        )
         {
             System.out.println("submitFluid mixin" + self.submitItemsOnInventoryChange() );
-
-            //System.out.println(System.identityHashCode(thisTask));
-            try{
-                //FluidStack stack = ((FluidTaskAccessor) self).getCachedFluidStack();
-                //long amount = ((FluidTaskMixinAccessor) self).getAmount();
-                //System.out.println("amount"+ amount);
-            }
-            catch (Exception e)
-            {
-                System.err.println("[Mixin Error] submitFluidTask 注入失败！");
-                e.printStackTrace();
-            }
-
+            SubmitHelper.submitTask(teamData, player, self);
         }
     }
 
