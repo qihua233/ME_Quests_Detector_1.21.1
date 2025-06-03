@@ -15,7 +15,7 @@ import static io.z23illucia.ae2_ftbquest_detector.Ae2_ftbquest_detector.MODID;
 public class ModItems {
     public static final DeferredRegister<Item> ITEMS = DeferredRegister.create(ForgeRegistries.ITEMS, MODID);
 
-    public static final RegistryObject<Item> DETECTOR_BLOCK_ITEM = ITEMS.register("ae2_ftbquests_detector",
+    public static final RegistryObject<Item> DETECTOR_BLOCK_ITEM = ITEMS.register("me_quests_detector",
             () -> new BlockItem(ModBlocks.DETECTOR_BLOCK.get(), new Item.Properties()));
 
     public static void register(IEventBus eventBus) {

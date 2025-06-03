@@ -8,40 +8,45 @@ import io.z23illucia.ae2_ftbquest_detector.utility.IFluidTaskExtension;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(FluidTask.class)
 public class FluidTaskMixin implements IFluidTaskExtension {
 
-    // 🔍 访问原有字段（私有）
-//    @Shadow
-//    private long amount;
-
-    // ✨ 添加你自己的字段，必须用 @Unique 避免字段冲突
     @Unique
     public Tristate consumeFluid;
 
     @Inject(method = "<init>", at = @At("TAIL"))
     private void onInit(long id, Quest quest, CallbackInfo ci) {
-        this.consumeFluid = Tristate.TRUE;
+        this.consumeFluid = Tristate.DEFAULT;
 
     }
 
-    // 💉 注入构造函数，在构造后标记 isModified
-    @Inject(method = "consumesResources", at = @At("HEAD"), remap = false, cancellable = true)
-    public void checkConsume(CallbackInfoReturnable<Boolean> cir) {
-        //this.isModified = true;
-        //System.out.println("[Mixin] FluidTask 构造完成，isModified 设置为 true");
-
+    //@Inject(method = "consumesResources", at = @At("HEAD"), remap = false, cancellable = true)
+    /**
+     * @author mod_author
+     * @reason fix
+     */
+    @Overwrite(remap = false)
+    public boolean consumesResources() {
         FluidTask self = (FluidTask)(Object)this;
-        boolean result = this.consumeFluid.get(self.getQuest().getChapter().consumeItems());
-        cir.setReturnValue(result);
-        cir.cancel();
+        return this.consumeFluid.get(self.getQuest().getChapter().consumeItems());
+
     }
+
+//    /**
+//     * @author mod_author
+//     * @reason fix
+//     */
+//    @Overwrite
+//    public boolean submitItemsOnInventoryChange() {
+//        return false;
+//    }
+
 
     @Inject(method = "fillConfigGroup", at = @At("TAIL"), remap = false)
     public void fillConfig(ConfigGroup config, CallbackInfo ci) {

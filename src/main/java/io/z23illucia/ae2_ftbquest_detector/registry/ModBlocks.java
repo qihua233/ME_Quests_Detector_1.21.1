@@ -15,7 +15,7 @@ public class ModBlocks {
 
     public static final DeferredRegister<Block> BLOCKS = DeferredRegister.create(ForgeRegistries.BLOCKS, MODID);
 
-    public static final RegistryObject<Block> DETECTOR_BLOCK = BLOCKS.register("ae2_ftbquests_detector", DetectorBlock::new);
+    public static final RegistryObject<Block> DETECTOR_BLOCK = BLOCKS.register("me_quests_detector", DetectorBlock::new);
 
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);

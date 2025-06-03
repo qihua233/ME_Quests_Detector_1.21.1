@@ -45,7 +45,6 @@ public class DetectorBlock extends Block implements EntityBlock {
     public DetectorBlock() {
         super(BlockBehaviour.Properties.of().strength(1.5f).requiresCorrectToolForDrops());
         this.registerDefaultState(this.stateDefinition.any()
-                .setValue(FACING, net.minecraft.core.Direction.NORTH)
                 .setValue(POWERED, false));
     }
 

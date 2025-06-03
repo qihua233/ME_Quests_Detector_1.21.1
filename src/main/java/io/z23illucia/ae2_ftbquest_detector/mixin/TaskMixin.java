@@ -30,7 +30,7 @@ public class TaskMixin {
                 && self.consumesResources()
         )
         {
-            System.out.println("submitFluid mixin" + self.submitItemsOnInventoryChange() );
+            //System.out.println("submitFluid mixin" + self.submitItemsOnInventoryChange() );
             SubmitHelper.submitTask(teamData, player, self);
         }
     }
