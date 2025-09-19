@@ -8,6 +8,7 @@ import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.util.AECableType;
+import appeng.blockentity.AEBaseBlockEntity;
 import dev.architectury.fluid.FluidStack;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
@@ -39,13 +40,13 @@ import java.util.*;
 
 import static io.z23illucia.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM;
 
-public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNodeHost, IStorageWatcherNode, IGridServiceProvider{
+public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGridNodeHost, IStorageWatcherNode, IGridServiceProvider{
 
     public IStackWatcher stackWatcher;
     public UUID ownerTeamId;
 
     @Override
-    protected void saveAdditional(CompoundTag tag) {
+    public void saveAdditional(CompoundTag tag) {
         super.saveAdditional(tag);
         if (ownerTeamId != null) {
             tag.putUUID("TeamId", ownerTeamId);
@@ -57,9 +58,10 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
         return AECableType.SMART;
     }
 
+
     @Override
-    public void load(CompoundTag tag) {
-        super.load(tag);
+    public void loadTag(CompoundTag tag) {
+        super.loadTag(tag);
         if (tag.hasUUID("TeamId")) {
             ownerTeamId = tag.getUUID("TeamId");
         }
@@ -86,29 +88,6 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
     @Override
     public void onStackChange(AEKey key, long l) {
         detectTask(key, l);
-//        var players = level.getEntitiesOfClass(
-//                Player.class,
-//                new AABB(this.getBlockPos()).inflate(100)
-//        );
-//
-//        MutableComponent msg = null;
-//        if(key instanceof AEItemKey itemKey){
-//            ItemStack stack = itemKey.toStack();
-//            stack.setCount((int)l);
-//            msg = Component.literal(
-//                    "- " + stack.getCount() + "x " + stack.getDisplayName().getString()
-//            );
-//            for (Player p : players)
-//            {
-//                p.sendSystemMessage(Component.literal("storage change"));
-//                p.sendSystemMessage(msg);
-//                detectTask(stack);
-//            }
-//        }
-//        else if(key instanceof AEFluidKey fluidKey){
-//            var fluidStack = fluidKey.toStack((int)l).getDisplayName();
-//            msg = Component.literal("- " + l + " mb x ").append(fluidStack);
-//        }
 
     }
 
@@ -134,6 +113,7 @@ public class DetectorBlockEntity extends BlockEntity implements IInWorldGridNode
             List<Task> tasksToCheck =file.getSubmitTasks();
             if (!tasksToCheck.isEmpty()) {
                 TeamData data = file.getNullableTeamData(ownerTeamId);
+
                 if (data != null && !data.isLocked()) {
                     for (Task task : tasksToCheck) {
                         if(data.canStartTasks(task.getQuest())

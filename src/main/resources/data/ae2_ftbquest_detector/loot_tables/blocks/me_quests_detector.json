@@ -1,0 +1,14 @@
+{
+  "type": "ae2_ftbquest_detector:me_quests_detector",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [
+        {
+          "type": "minecraft:item",
+          "name": "ae2_ftbquest_detector:me_quests_detector"
+        }
+      ]
+    }
+  ]
+}

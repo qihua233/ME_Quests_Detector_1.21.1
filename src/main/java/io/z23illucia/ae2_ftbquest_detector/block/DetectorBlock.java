@@ -3,6 +3,7 @@ package io.z23illucia.ae2_ftbquest_detector.block;
 
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
+import appeng.datagen.providers.tags.ConventionTags;
 import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbteams.FTBTeams;
@@ -37,13 +38,15 @@ import org.apache.commons.lang3.ObjectUtils;
 import javax.annotation.Nullable;
 import java.util.Optional;
 
+import static io.z23illucia.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM;
+
 
 public class DetectorBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
 
     public DetectorBlock() {
-        super(BlockBehaviour.Properties.of().strength(1.5f).requiresCorrectToolForDrops());
+        super(BlockBehaviour.Properties.of().strength(1.5f));
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(POWERED, false));
     }
@@ -69,8 +72,10 @@ public class DetectorBlock extends Block implements EntityBlock {
     public InteractionResult use(BlockState state, Level level, BlockPos pos,
                                  Player player, InteractionHand hand, BlockHitResult hit) {
         if (level.isClientSide || !(player instanceof ServerPlayer serverPlayer)) {
-            return InteractionResult.SUCCESS;
+            return InteractionResult.PASS;
         }
+        //System.out.println("use");
+
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {
             var node = detector.getGridNode(null);
@@ -105,6 +110,7 @@ public class DetectorBlock extends Block implements EntityBlock {
                         for(var entry : node.getGrid().getStorageService().getInventory().getAvailableStacks()){
                             var key = entry.getKey();
                             var num = entry.getLongValue();
+
                             detector.detectTask(key, num);
                         }
 
@@ -121,9 +127,6 @@ public class DetectorBlock extends Block implements EntityBlock {
                             Component.translatable("ae2-ftbquests-detector.detector.invalid_owner"))
                     );
                 }
-
-
-
             }
 
         }

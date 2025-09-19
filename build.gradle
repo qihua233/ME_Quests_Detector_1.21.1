@@ -145,19 +145,75 @@ repositories {
     // flatDir {
     //     dir 'libs'
     // }
+    mavenCentral()
     maven {
-        name "Modmaven"
-        url "https://modmaven.dev/"
+        url = "https://maven.minecraftforge.net/"
+    }
+    maven {
+        url = "https://maven.architectury.dev"
+    }
+    maven {
+        url = "https://maven.saps.dev/minecraft"
+    }
+    maven {
+        url = "https://dvs1.progwml6.com/files/maven/"
+    }
+    maven {
+        url = "https://maven.blamejared.com/"
+    }
+    maven {
+        url = "https://modmaven.dev"
+    }
+    maven {
+        url = "https://cursemaven.com"
+    }
+    maven {
+        url = "https://maven.tterrag.com/"
+    }
+    maven {
+        url = "https://maven.resourcefulbees.com/repository/maven-public/"
+    }
+    maven {
+        url = "https://maven.teamresourceful.com/repository/maven-public/"
+    }
+    maven {
+        url = "https://maven.firstdarkdev.xyz/snapshots"
+    }
+    maven {
+        url = "https://maven.gtceu.com"
+    }
+    maven {
+        url = "https://maven.rover656.dev/releases"
+    }
+    maven {
+        url = "https://maven.theillusivec4.top/"
+    }
+    maven {
+        maven {
+            name = 'ModdingX Maven'
+            url = 'https://maven.moddingx.org/'
+        }
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+    }
+    maven {
+        url "https://maven.latvian.dev/releases"
         content {
-            includeGroup 'appeng'
+            includeGroup "dev.latvian.mods"
+            includeGroup "dev.latvian.apps"
         }
     }
-    mavenCentral()
-    maven {url = "https://maven.impactdev.net/repository/development/"}
-    maven {url = "https://cursemaven.com"}
-    maven {url = "https://thedarkcolour.github.io/KotlinForForge/"}
-    maven { url = "https://api.modrinth.com/maven" }
 
+    maven {
+        url 'https://jitpack.io'
+        content {
+            includeGroup "com.github.rtyley"
+        }
+    }
+    maven {
+        name "ftbMavenReleases"
+        url "https://maven.ftb.dev/releases"
+    }
 }
 
 dependencies {
@@ -174,27 +230,22 @@ dependencies {
     // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-forge-api:${jei_version}")
     // runtimeOnly fg.deobf("mezz.jei:jei-${mc_version}-forge:${jei_version}")
 
-    // Example mod dependency using a mod jar from ./libs with a flat dir repository
-    // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
-    // The group id is ignored when searching -- in this case, it is "blank"
-    // implementation fg.deobf("blank:coolmod-${mc_version}:${coolmod_version}")
-
-    // For more info:
-    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
-    // http://www.gradle.org/docs/current/userguide/dependency_management.html
     implementation fg.deobf("appeng:appliedenergistics2-forge:${ae2_version}")
 
-    implementation fg.deobf("curse.maven:architectury-api-419699:5137938")
+    implementation fg.deobf("dev.architectury:architectury-forge:${architectury_version}")
 
-    implementation fg.deobf("curse.maven:ftb-quests-forge-289412:6431737")
-    implementation fg.deobf("curse.maven:ftb-library-forge-404465:6164053")
-    implementation fg.deobf("curse.maven:ftb-teams-forge-404468:6130786")
+//    implementation fg.deobf("curse.maven:ftb-quests-forge-289412:6431737")
+//    implementation fg.deobf("curse.maven:ftb-library-forge-404465:6164053")
+//    implementation fg.deobf("curse.maven:ftb-teams-forge-404468:6130786")
+    implementation fg.deobf("dev.ftb.mods:ftb-quests-forge:${ftb_quests_version}")
+    implementation fg.deobf("dev.ftb.mods:ftb-teams-forge:${ftb_teams_version}")
+    implementation fg.deobf("dev.ftb.mods:ftb-library-forge:${ftb_library_version}")
 
-    implementation fg.deobf("maven.modrinth:jade:11.13.1+forge")
-    implementation fg.deobf("curse.maven:ldlib-forge-626676:6497741")
+    runtimeOnly fg.deobf("curse.maven:jade-324717:5640610")
+    //implementation fg.deobf("curse.maven:ldlib-forge-626676:6497741")
     // FTB Quests
 
-
+    runtimeOnly fg.deobf("mezz.jei:jei-1.20.1-forge:15.20.0.105")
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 
 
