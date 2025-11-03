@@ -52,15 +52,3 @@ public class TaskMixin {
     }
 }
 
-@Mixin(FluidTask.class)
-interface FluidTaskMixinAccessor {
-    @Accessor(value = "amount", remap = false)
-    long getAmount();
-
-//    @Accessor("consumeFluid")
-//    boolean getConsumeFluid();
-//    @Accessor("amount")
-//    void setAmount(long value);
-
-
-}

@@ -35,17 +35,7 @@ public class FluidTaskMixin implements IFluidTaskExtension {
     public boolean consumesResources() {
         FluidTask self = (FluidTask)(Object)this;
         return this.consumeFluid.get(self.getQuest().getChapter().consumeItems());
-
     }
-
-//    /**
-//     * @author mod_author
-//     * @reason fix
-//     */
-//    @Overwrite
-//    public boolean submitItemsOnInventoryChange() {
-//        return false;
-//    }
 
 
     @Inject(method = "fillConfigGroup", at = @At("TAIL"), remap = false)

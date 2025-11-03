@@ -7,6 +7,7 @@ import appeng.api.networking.storage.IStorageWatcherNode;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
+import appeng.api.stacks.KeyCounter;
 import appeng.api.util.AECableType;
 import appeng.blockentity.AEBaseBlockEntity;
 import dev.architectury.fluid.FluidStack;
@@ -16,6 +17,7 @@ import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
+import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.z23illucia.ae2_ftbquest_detector.block.DetectorBlock;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
 
@@ -44,6 +46,11 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
     public IStackWatcher stackWatcher;
     public UUID ownerTeamId;
+
+    private Map<AEKey, List<Task>> cachedTasksByKey = new HashMap<>();
+    private long lastCacheUpdate = 0;
+    private boolean cacheDirty = true;
+    private boolean stateDirty = true;
 
     @Override
     public void saveAdditional(CompoundTag tag) {
@@ -78,9 +85,14 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
     @Override
     public void updateWatcher(IStackWatcher iStackWatcher) {
         stackWatcher = iStackWatcher;
-
-        stackWatcher.setWatchAll(true);
-        //System.out.println("update");
+        if(cachedTasksByKey.isEmpty())
+            stackWatcher.setWatchAll(true);
+        else{
+            for(var key : cachedTasksByKey.keySet())
+            {
+                stackWatcher.add(key);
+            }
+        }
     }
 
 
@@ -88,7 +100,6 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
     @Override
     public void onStackChange(AEKey key, long l) {
         detectTask(key, l);
-
     }
 
 
@@ -97,6 +108,7 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
         FTBTeamsAPI.api().getManager().getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
                 {
                     ownerTeamId = team.getId();
+                    markCacheDirty();
                 }
                 );
 
@@ -109,50 +121,106 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
     public void detectTask(AEKey key, long num) {
         ServerQuestFile file = ServerQuestFile.INSTANCE;
-        if (file != null) {
-            List<Task> tasksToCheck =file.getSubmitTasks();
-            if (!tasksToCheck.isEmpty()) {
-                TeamData data = file.getNullableTeamData(ownerTeamId);
+        if (file == null) return;
 
-                if (data != null && !data.isLocked()) {
-                    for (Task task : tasksToCheck) {
-                        if(data.canStartTasks(task.getQuest())
-                                && task instanceof FluidTask fluidTask
-                                && key instanceof AEFluidKey fluidKey
-                                && (fluidTask.getFluid() == fluidKey.getFluid())
-                        )
-                        {
-                            long c = Math.min(task.getMaxProgress(), num);
-                            //System.out.println(task.getMaxProgress());
-                            //System.out.println(num);
-                            //System.out.println(data.getProgress(task));
-                            if (c > data.getProgress(task)) {
-                                data.setProgress(task, c);
-                            }
+        // 更新缓存（如果需要）
+        updateTaskCacheIfNeeded(file);
+        if(TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) return;
 
-                        }
-                        else if ( data.canStartTasks(task.getQuest())
-                                && task instanceof ItemTask itemTask
-                                && key instanceof AEItemKey itemKey
-                                && itemTask.test(itemKey.toStack())
-                        ) {
-                            long c = Math.min(task.getMaxProgress(), num);
-                            if (c > data.getProgress(task)) {
-                                data.setProgress(task, c);
-                            }
-                        }
+        TeamData data = file.getNullableTeamData(ownerTeamId);
+        if (data == null || data.isLocked()) return;
 
+
+        // 只检查与当前key相关的任务
+        List<Task> relevantTasks = cachedTasksByKey.get(key);
+        if (relevantTasks != null) {
+            for (Task task : relevantTasks) {
+                if (data.canStartTasks(task.getQuest())) {
+                    long c = Math.min(task.getMaxProgress(), num);
+                    if (c > data.getProgress(task)) {
+                        data.setProgress(task, c);
                     }
-
                 }
+            }
+        }
+    }
 
-                };
+    int tickCount = 0;
 
-
+    public void tick() {
+        tickCount = (tickCount + 1 ) % 40;
+        if(tickCount == 0 && stateDirty)
+        {
+            performFullDetection();
         }
     }
 
 
+
+    private void updateTaskCacheIfNeeded(ServerQuestFile file) {
+        if (!cacheDirty) return;
+
+        cachedTasksByKey.clear();
+        List<Task> tasksToCheck = file.getSubmitTasks();
+        file.markDirty();
+        for (Task task : tasksToCheck) {
+            if (task instanceof FluidTask fluidTask) {
+                AEFluidKey fluidKey = AEFluidKey.of(fluidTask.getFluid());
+                cachedTasksByKey.computeIfAbsent(fluidKey, k -> new ArrayList<>()).add(task);
+            }
+            else if (task instanceof ItemTask itemTask) {
+                AEItemKey itemKey = AEItemKey.of(itemTask.getItemStack());
+                cachedTasksByKey.computeIfAbsent(itemKey, k -> new ArrayList<>()).add(task);
+            }
+        }
+
+        cacheDirty = false;
+    }
+
+    public void markCacheDirty() {
+        this.cacheDirty = true;
+    }
+
+    public void markStateDirty() {
+        this.stateDirty = true;
+    }
+    /**
+     * 主动扫描整个库存并检测所有相关任务
+     * 适用于外部调用的完整检测
+     */
+    public void performFullDetection() {
+        if(!stateDirty) return;
+        stateDirty = false;
+
+        ServerQuestFile file = ServerQuestFile.INSTANCE;
+        if (file == null || ownerTeamId == null) return;
+
+        if(TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) return;
+
+        updateTaskCacheIfNeeded(file);
+
+        TeamData data = file.getNullableTeamData(ownerTeamId);
+        if (data == null || data.isLocked()) return;
+
+        KeyCounter keyCounter = Objects.requireNonNull(getGridNode(null)).getGrid().getStorageService().getInventory().getAvailableStacks();
+        if(keyCounter != null)
+        {
+            for(var key:cachedTasksByKey.keySet())
+            {
+                List<Task> relevantTasks = cachedTasksByKey.get(key);
+                for (Task task : relevantTasks) {
+                    if (data.canStartTasks(task.getQuest())) {
+                        long num = keyCounter.get(key);
+                        long c = Math.min(task.getMaxProgress(), num);
+                        if (c > data.getProgress(task)) {
+                            data.setProgress(task, c);
+                        }
+                    }
+                }
+
+            }
+        }
+    }
 
     private boolean nodeInitialized = false;
     @Override

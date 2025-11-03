@@ -6,9 +6,9 @@
   "refmap": "ae2_ftbquest_detector.refmap.json",
   "mixins": [
     "FluidTaskMixin",
-    "FluidTaskMixinAccessor",
     "ItemTaskMixin",
-    "TaskMixin"
+    "TaskMixin",
+    "TeamDataMixin"
   ],
   "client": [
   ],

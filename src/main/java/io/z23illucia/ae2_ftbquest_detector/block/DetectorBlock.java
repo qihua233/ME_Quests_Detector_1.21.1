@@ -107,12 +107,7 @@ public class DetectorBlock extends Block implements EntityBlock {
                                 Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString())
                         ));
 
-                        for(var entry : node.getGrid().getStorageService().getInventory().getAvailableStacks()){
-                            var key = entry.getKey();
-                            var num = entry.getLongValue();
-
-                            detector.detectTask(key, num);
-                        }
+                        detector.performFullDetection();
 
                     }, () -> {
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(

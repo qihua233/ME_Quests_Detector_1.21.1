@@ -39,14 +39,16 @@ public class SubmitHelper {
 
                 if(key != null)
                 {
-                    long extractable = Inventory.extract(key,
+                    long extractable = Inventory.extract(
+                            key,
                             amount,
                             Actionable.SIMULATE,
                             IActionSource.ofPlayer(player)
                     );
                     if(extractable > 0)
                     {
-                        Inventory.extract(key,
+                        Inventory.extract(
+                                key,
                                 extractable,
                                 Actionable.MODULATE,
                                 IActionSource.ofPlayer(player)
