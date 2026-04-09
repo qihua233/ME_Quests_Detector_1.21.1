@@ -15,7 +15,7 @@
 
 该模组用于将 AE2 存储网络与 FTB Quests 的提交/检测任务联动，支持物品与流体任务检测。
 
-当前仓库由 qihua233 维护，基于原作者 LuckyBlock、mmyddd 的项目继续适配与修复。
+当前仓库基于原作者 LuckyBlock、mmyddd 的项目继续适配与修复。
 
 ## 相关仓库
 
