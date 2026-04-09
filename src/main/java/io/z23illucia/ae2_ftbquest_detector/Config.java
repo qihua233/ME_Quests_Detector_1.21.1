@@ -1,21 +1,40 @@
 package io.z23illucia.ae2_ftbquest_detector;
 
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.Item;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.config.ModConfigEvent;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-// An example config class. This is not required, but it's a good idea to have one to keep your config organized.
-// Demonstrates how to use Forge's config APIs
-@Mod.EventBusSubscriber(modid = Ae2_ftbquest_detector.MODID, bus = Mod.EventBusSubscriber.Bus.MOD)
 public class Config {
 
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+
+    public static final ModConfigSpec.BooleanValue ENABLE_DETECTOR;
+    public static final ModConfigSpec.IntValue DETECTOR_TICK_RATE;
+
+    static {
+        BUILDER.push("General");
+        
+        ENABLE_DETECTOR = BUILDER
+                .comment("Enable or disable the AE2 FTB Quests Detector block")
+                .define("enableDetector", true);
+                
+        DETECTOR_TICK_RATE = BUILDER
+                .comment("How often (in ticks) the detector should perform a full scan of the AE2 network. Default: 20 (1 second)")
+                .defineInRange("detectorTickRate", 20, 10, 1200);
+
+        BUILDER.pop();
+    }
+
+    public static final ModConfigSpec SPEC = BUILDER.build();
+
+    public static boolean enableDetector;
+    public static int detectorTickRate;
+
+    @SubscribeEvent
+    public static void onLoad(final ModConfigEvent event) {
+        if (event.getConfig().getSpec() == SPEC) {
+            enableDetector = ENABLE_DETECTOR.get();
+            detectorTickRate = DETECTOR_TICK_RATE.get();
+        }
+    }
 }

@@ -2,15 +2,13 @@ package io.z23illucia.ae2_ftbquest_detector.blockentity;
 
 
 import appeng.api.networking.*;
-
 import appeng.api.networking.storage.IStorageWatcherNode;
 import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
 import appeng.api.util.AECableType;
-import appeng.blockentity.AEBaseBlockEntity;
-import dev.architectury.fluid.FluidStack;
+import appeng.blockentity.grid.AENetworkedBlockEntity;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
@@ -20,41 +18,32 @@ import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.z23illucia.ae2_ftbquest_detector.block.DetectorBlock;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
-
-import io.z23illucia.ae2_ftbquest_detector.registry.ModBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import org.jetbrains.annotations.Nullable;
 
 
 import java.util.*;
 
-import static io.z23illucia.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM;
-
-public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGridNodeHost, IStorageWatcherNode, IGridServiceProvider{
+@SuppressWarnings("null")
+public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStorageWatcherNode, IGridServiceProvider{
 
     public IStackWatcher stackWatcher;
     public UUID ownerTeamId;
 
     private Map<AEKey, List<Task>> cachedTasksByKey = new HashMap<>();
-    private long lastCacheUpdate = 0;
     private boolean cacheDirty = true;
     private boolean stateDirty = true;
+    private boolean reconnectPending = false;
+    private boolean listed = false;
 
     @Override
-    public void saveAdditional(CompoundTag tag) {
-        super.saveAdditional(tag);
+    public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
         if (ownerTeamId != null) {
             tag.putUUID("TeamId", ownerTeamId);
         }
@@ -67,29 +56,28 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
 
     @Override
-    public void loadTag(CompoundTag tag) {
-        super.loadTag(tag);
+    public void loadTag(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadTag(tag, registries);
         if (tag.hasUUID("TeamId")) {
             ownerTeamId = tag.getUUID("TeamId");
         }
     }
 
-    private final IManagedGridNode managedGridNode = GridHelper.createManagedNode(
-                    this,
-                    DetectorBlockEntityListener.INSTANCE
-            ).setInWorldNode(true).setFlags(GridFlags.REQUIRE_CHANNEL)
-            .addService(IStorageWatcherNode.class, this)
-            .setVisualRepresentation(DETECTOR_BLOCK_ITEM.get())
-            ;
+    @Override
+    protected IManagedGridNode createMainNode() {
+        return GridHelper.createManagedNode(this, DetectorBlockEntityListener.INSTANCE)
+                .setFlags(GridFlags.REQUIRE_CHANNEL)
+                .setExposedOnSides(EnumSet.allOf(Direction.class))
+                .addService(IStorageWatcherNode.class, this);
+    }
 
     @Override
     public void updateWatcher(IStackWatcher iStackWatcher) {
         stackWatcher = iStackWatcher;
-        if(cachedTasksByKey.isEmpty())
-            stackWatcher.setWatchAll(true);
-        else{
-            for(var key : cachedTasksByKey.keySet())
-            {
+        stackWatcher.reset();
+        stackWatcher.setWatchAll(true);
+        if(!cachedTasksByKey.isEmpty()) {
+            for(var key : cachedTasksByKey.keySet()) {
                 stackWatcher.add(key);
             }
         }
@@ -99,7 +87,7 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
     @Override
     public void onStackChange(AEKey key, long l) {
-        detectTask(key, l);
+        markStateDirty();
     }
 
 
@@ -121,7 +109,7 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
     public void detectTask(AEKey key, long num) {
         ServerQuestFile file = ServerQuestFile.INSTANCE;
-        if (file == null) return;
+        if (file == null || ownerTeamId == null) return;
 
         // 更新缓存（如果需要）
         updateTaskCacheIfNeeded(file);
@@ -139,6 +127,7 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
                     long c = Math.min(task.getMaxProgress(), num);
                     if (c > data.getProgress(task)) {
                         data.setProgress(task, c);
+                        markStateDirty();
                     }
                 }
             }
@@ -148,10 +137,20 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
     int tickCount = 0;
 
     public void tick() {
-        tickCount = (tickCount + 1 ) % 40;
-        if(tickCount == 0 && stateDirty)
+        tickCount = (tickCount + 1 ) % io.z23illucia.ae2_ftbquest_detector.Config.detectorTickRate;
+        if(tickCount == 0)
         {
-            performFullDetection();
+            if (reconnectPending) {
+                reconnectPending = false;
+                if (getMainNode().isReady()) {
+                    getMainNode().setExposedOnSides(EnumSet.noneOf(Direction.class));
+                    getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
+                }
+                markCacheDirty();
+            }
+            if (stateDirty) {
+                stateDirty = !performFullDetectionInternal();
+            }
         }
     }
 
@@ -163,14 +162,21 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
         cachedTasksByKey.clear();
         List<Task> tasksToCheck = file.getSubmitTasks();
         file.markDirty();
+        
+        if (stackWatcher != null) {
+            stackWatcher.reset();
+        }
+        
         for (Task task : tasksToCheck) {
             if (task instanceof FluidTask fluidTask) {
                 AEFluidKey fluidKey = AEFluidKey.of(fluidTask.getFluid());
                 cachedTasksByKey.computeIfAbsent(fluidKey, k -> new ArrayList<>()).add(task);
+                if (stackWatcher != null) stackWatcher.add(fluidKey);
             }
             else if (task instanceof ItemTask itemTask) {
                 AEItemKey itemKey = AEItemKey.of(itemTask.getItemStack());
                 cachedTasksByKey.computeIfAbsent(itemKey, k -> new ArrayList<>()).add(task);
+                if (stackWatcher != null) stackWatcher.add(itemKey);
             }
         }
 
@@ -179,9 +185,24 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
 
     public void markCacheDirty() {
         this.cacheDirty = true;
+        this.stateDirty = true;
+        if (this.getMainNode().isReady()) {
+            try {
+                appeng.api.networking.IGrid grid = this.getMainNode().getGrid();
+                if (grid != null) {
+                    grid.getTickManager().wakeDevice(this.getMainNode().getNode());
+                }
+            } catch (Exception e) {
+            }
+        }
     }
 
     public void markStateDirty() {
+        this.stateDirty = true;
+    }
+
+    public void requestReconnect() {
+        this.reconnectPending = true;
         this.stateDirty = true;
     }
     /**
@@ -189,22 +210,35 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
      * 适用于外部调用的完整检测
      */
     public void performFullDetection() {
-        if(!stateDirty) return;
-        stateDirty = false;
+        performFullDetectionInternal();
+    }
 
+    private boolean performFullDetectionInternal() {
         ServerQuestFile file = ServerQuestFile.INSTANCE;
-        if (file == null || ownerTeamId == null) return;
+        if (file == null || ownerTeamId == null) return false;
 
-        if(TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) return;
+        if(TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) return false;
 
         updateTaskCacheIfNeeded(file);
 
         TeamData data = file.getNullableTeamData(ownerTeamId);
-        if (data == null || data.isLocked()) return;
+        if (data == null || data.isLocked()) return false;
 
-        KeyCounter keyCounter = Objects.requireNonNull(getGridNode(null)).getGrid().getStorageService().getInventory().getAvailableStacks();
+        IGrid grid = getMainNode().getGrid();
+        if (grid == null) return false;
+
+        var storageService = grid.getStorageService();
+        if (storageService == null) return false;
+
+        var inventory = storageService.getInventory();
+        if (inventory == null) return false;
+
+        KeyCounter keyCounter = inventory.getAvailableStacks();
+        if (keyCounter == null) return true;
+
         if(keyCounter != null)
         {
+            boolean progressChanged = false;
             for(var key:cachedTasksByKey.keySet())
             {
                 List<Task> relevantTasks = cachedTasksByKey.get(key);
@@ -214,37 +248,45 @@ public class DetectorBlockEntity extends AEBaseBlockEntity implements IInWorldGr
                         long c = Math.min(task.getMaxProgress(), num);
                         if (c > data.getProgress(task)) {
                             data.setProgress(task, c);
+                            progressChanged = true;
                         }
                     }
                 }
-
             }
+            if (progressChanged) {
+                markStateDirty();
+            }
+        }
+        return true;
+    }
+
+    @Override
+    public void onReady() {
+        super.onReady();
+        getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
+        requestReconnect();
+        if (!listed) {
+            DetectorEntityList.register(this);
+            listed = true;
         }
     }
 
-    private boolean nodeInitialized = false;
     @Override
-    public void onLoad() {
-        if (!nodeInitialized && level instanceof ServerLevel serverLevel) {
-            nodeInitialized = true;
-            managedGridNode.create(serverLevel, this.getBlockPos());
-            //Node.
-            DetectorEntityList.register(this);
-            //System.out.println(managedGridNode.isActive());
+    public void onChunkUnloaded() {
+        if (listed) {
+            DetectorEntityList.unregister(this);
+            listed = false;
         }
-
+        super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
+        if (listed) {
+            DetectorEntityList.unregister(this);
+            listed = false;
+        }
         super.setRemoved();
-        DetectorEntityList.unregister(this);
-        managedGridNode.destroy();
-    }
-
-    @Override
-    public @Nullable IGridNode getGridNode(Direction direction) {
-        return managedGridNode.getNode();
     }
 
 
@@ -260,16 +302,16 @@ class DetectorBlockEntityListener implements IGridNodeListener<DetectorBlockEnti
     }
 
     @Override
+    @SuppressWarnings("null")
     public void onStateChanged(DetectorBlockEntity nodeOwner, IGridNode node, State reason) {
-        //System.out.println(node.isPowered()+" "+reason);
-        nodeOwner.getLevel().setBlock(
-                nodeOwner.getBlockPos(),
-                nodeOwner.getBlockState().setValue(DetectorBlock.POWERED, node.isPowered()),
-                3
-        );
-        // for example: change block state of nodeOwner to indicate state
-        // send node owner to clients
+        var level = nodeOwner.getLevel();
+        if (level != null) {
+            level.setBlock(
+                    nodeOwner.getBlockPos(),
+                    nodeOwner.getBlockState().setValue(DetectorBlock.POWERED, node.isPowered()),
+                    3
+            );
+        }
     }
 
 }
-

@@ -1,11 +1,7 @@
 package io.z23illucia.ae2_ftbquest_detector.mixin;
-import appeng.api.config.Actionable;
-import appeng.api.networking.security.IActionSource;
-import appeng.api.stacks.AEItemKey;
 import dev.ftb.mods.ftbquests.item.MissingItem;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import io.z23illucia.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;

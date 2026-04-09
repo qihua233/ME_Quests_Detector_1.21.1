@@ -1,12 +1,10 @@
 package io.z23illucia.ae2_ftbquest_detector.blockentity;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class DetectorEntityList {
-    private static final List<DetectorBlockEntity> TRACKED_ENTITIES = Collections.synchronizedList(new ArrayList<>());
-
+    private static final List<DetectorBlockEntity> TRACKED_ENTITIES = new CopyOnWriteArrayList<>();
 
     public static void register(DetectorBlockEntity be) {
         TRACKED_ENTITIES.add(be);
@@ -17,6 +15,6 @@ public class DetectorEntityList {
     }
 
     public static List<DetectorBlockEntity> getAll() {
-        return List.copyOf(TRACKED_ENTITIES); // 返回不可修改视图
+        return TRACKED_ENTITIES; 
     }
 }

@@ -4,6 +4,7 @@
   "ae2-ftbquests-detector.detector.uncharged": "设备未连接",
   "ae2-ftbquests-detector.detector.no_owner": "无所属队伍",
   "ae2-ftbquests-detector.detector.owner_is": "所属队伍： %s",
-  "ae2-ftbquests-detector.detector.invalid_owner": "所属队伍不存在"
-
+  "ae2-ftbquests-detector.detector.invalid_owner": "所属队伍不存在",
+  "ae2_ftbquest_detector.configuration.enableDetector": "启用探测器",
+  "ae2_ftbquest_detector.configuration.detectorTickRate": "探测器扫描频率 (Ticks)"
 }

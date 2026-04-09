@@ -1,23 +1,14 @@
 package io.z23illucia.ae2_ftbquest_detector.block;
 
 
-import appeng.api.stacks.AEFluidKey;
-import appeng.api.stacks.AEItemKey;
-import appeng.datagen.providers.tags.ConventionTags;
-import dev.ftb.mods.ftbquests.api.FTBQuestsAPI;
-import dev.ftb.mods.ftbquests.quest.TeamData;
-import dev.ftb.mods.ftbteams.FTBTeams;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.api.Team;
-import dev.ftb.mods.ftbteams.api.TeamManager;
 import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -33,14 +24,14 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
-import org.apache.commons.lang3.ObjectUtils;
+import net.minecraft.world.ItemInteractionResult;
+import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
 import java.util.Optional;
 
-import static io.z23illucia.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM;
 
-
+@SuppressWarnings("null")
 public class DetectorBlock extends Block implements EntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
@@ -52,47 +43,37 @@ public class DetectorBlock extends Block implements EntityBlock {
     }
 
     @Override
-    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+    protected void createBlockStateDefinition(@NotNull StateDefinition.Builder<Block, BlockState> builder) {
         builder.add(FACING, POWERED);
     }
 
     @Override
-    public RenderShape getRenderShape(BlockState state) {
+    public @NotNull RenderShape getRenderShape(@NotNull BlockState state) {
         return RenderShape.MODEL;
     }
 
     @Nullable
     @Override
-    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+    public BlockEntity newBlockEntity(@NotNull BlockPos pos, @NotNull BlockState state) {
         return new DetectorBlockEntity(pos, state);
     }
 
 
     @Override
-    public InteractionResult use(BlockState state, Level level, BlockPos pos,
-                                 Player player, InteractionHand hand, BlockHitResult hit) {
-        if (level.isClientSide || !(player instanceof ServerPlayer serverPlayer)) {
-            return InteractionResult.PASS;
+    protected ItemInteractionResult useItemOn(@NotNull ItemStack stack, @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
+                                 @NotNull Player player, @NotNull InteractionHand hand, @NotNull BlockHitResult hit) {
+        if (level.isClientSide || !(player instanceof ServerPlayer)) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
-        //System.out.println("use");
 
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {
             var node = detector.getGridNode(null);
-            if (node == null || !node.isPowered()) {
-//                player.displayClientMessage(
-//                        Component.translatable("ae2-ftbquests-detector.detector.uncharged"),
-//                        true
-//                );
-                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                        Component.translatable("ae2-ftbquests-detector.detector.uncharged")
-                ));
-
-            }
-            else if(detector.ownerTeamId == null)
+            if(detector.ownerTeamId == null)
             {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.no_owner");
                 ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                        Component.translatable("ae2-ftbquests-detector.detector.no_owner")
+                        message
                 ));
             }
             else
@@ -103,40 +84,67 @@ public class DetectorBlock extends Block implements EntityBlock {
                             .getManager()
                             .getTeamByID(detector.ownerTeamId);
                     optionalTeam.ifPresentOrElse(team -> {
+                        Component message = Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString());
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                                Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString())
+                                message
                         ));
 
-                        detector.performFullDetection();
+                        if (node != null && node.isPowered()) {
+                            detector.performFullDetection();
+                        }
 
                     }, () -> {
+                        Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                                Component.translatable("ae2-ftbquests-detector.detector.invalid_owner")
+                                message
                         ));
 
                     });
                 }
                 catch (Exception e)
                 {
+                    Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                     ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                            Component.translatable("ae2-ftbquests-detector.detector.invalid_owner"))
+                            message)
                     );
                 }
             }
 
+            if ((node == null || !node.isPowered()) && detector.ownerTeamId == null) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
+                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
+            }
+
         }
-        return InteractionResult.SUCCESS;
+        return ItemInteractionResult.SUCCESS;
     }
 
     @Override
-    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+    public void setPlacedBy(@NotNull Level level, @NotNull BlockPos pos, @NotNull BlockState state, @Nullable LivingEntity placer, @NotNull ItemStack stack) {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
-                d.setOwnerTeam(player);
+                java.util.UUID teamId = stack.get(io.z23illucia.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
+                if (teamId != null) {
+                    d.ownerTeamId = teamId;
+                    d.markCacheDirty();
+                } else {
+                    d.setOwnerTeam(player);
+                }
+                d.requestReconnect();
             }
         }
         super.setPlacedBy(level, pos, state, placer, stack);
     }
-}
 
+    @Override
+    public void neighborChanged(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos, @NotNull Block block, @NotNull BlockPos fromPos, boolean isMoving) {
+        if (!level.isClientSide) {
+            BlockEntity be = level.getBlockEntity(pos);
+            if (be instanceof DetectorBlockEntity detector) {
+                detector.requestReconnect();
+            }
+        }
+        super.neighborChanged(state, level, pos, block, fromPos, isMoving);
+    }
+}

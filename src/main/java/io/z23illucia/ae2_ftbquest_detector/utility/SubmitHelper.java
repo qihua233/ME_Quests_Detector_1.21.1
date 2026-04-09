@@ -11,10 +11,6 @@ import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.fluids.FluidStack;
-
-import java.util.Objects;
 
 public class SubmitHelper {
     public static void submitTask(TeamData teamData, ServerPlayer player, Task task)
@@ -23,10 +19,23 @@ public class SubmitHelper {
 
         for(var e: DetectorEntityList.getAll())
         {
-            //System.out.println(e.getBlockPos());
-            if(e.ownerTeamId.equals(teamData.getTeamId()))
+            if(e.ownerTeamId != null && e.ownerTeamId.equals(teamData.getTeamId()))
             {
-                var Inventory = Objects.requireNonNull(e.getGridNode(null)).getGrid().getStorageService().getInventory();
+                var grid = e.getMainNode().getGrid();
+                if (grid == null) {
+                    continue;
+                }
+
+                var storageService = grid.getStorageService();
+                if (storageService == null) {
+                    continue;
+                }
+
+                var inventory = storageService.getInventory();
+                if (inventory == null) {
+                    continue;
+                }
+
                 var amount = task.getMaxProgress() - teamData.getProgress(task);
                 AEKey key = null;
                 if(task instanceof ItemTask itemTask)
@@ -39,7 +48,7 @@ public class SubmitHelper {
 
                 if(key != null)
                 {
-                    long extractable = Inventory.extract(
+                    long extractable = inventory.extract(
                             key,
                             amount,
                             Actionable.SIMULATE,
@@ -47,7 +56,7 @@ public class SubmitHelper {
                     );
                     if(extractable > 0)
                     {
-                        Inventory.extract(
+                        inventory.extract(
                                 key,
                                 extractable,
                                 Actionable.MODULATE,

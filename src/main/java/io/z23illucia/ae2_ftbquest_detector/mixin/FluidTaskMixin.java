@@ -5,8 +5,9 @@ import dev.ftb.mods.ftblibrary.config.Tristate;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import io.z23illucia.ae2_ftbquest_detector.utility.IFluidTaskExtension;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Unique;
@@ -15,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(FluidTask.class)
+@SuppressWarnings("null")
 public class FluidTaskMixin implements IFluidTaskExtension {
 
     @Unique
@@ -60,24 +62,26 @@ public class FluidTaskMixin implements IFluidTaskExtension {
     }
 
     @Inject(method = "writeData", at = @At("TAIL"), remap = false)
-    private void writeNBT(CompoundTag tag, CallbackInfo ci) {
-        tag.putString("consume_fluid", consumeFluid.name());
+    private void writeNBT(CompoundTag tag, HolderLookup.Provider provider, CallbackInfo ci) {
+        String consumeFluidName = consumeFluid.name();
+        tag.putString("consume_fluid", consumeFluidName);
     }
 
     @Inject(method = "readData", at = @At("TAIL"), remap = false)
-    private void readNBT(CompoundTag tag, CallbackInfo ci) {
+    private void readNBT(CompoundTag tag, HolderLookup.Provider provider, CallbackInfo ci) {
         if (tag.contains("consume_fluid")) {
             consumeFluid = Tristate.valueOf(tag.getString("consume_fluid"));
         }
     }
 
     @Inject(method = "writeNetData", at = @At("TAIL"), remap = false)
-    private void writeNet(FriendlyByteBuf buffer, CallbackInfo ci) {
-        buffer.writeEnum(consumeFluid);
+    private void writeNet(RegistryFriendlyByteBuf buffer, CallbackInfo ci) {
+        Enum<?> value = consumeFluid;
+        buffer.writeEnum(value);
     }
 
     @Inject(method = "readNetData", at = @At("TAIL"), remap = false)
-    private void readNet(FriendlyByteBuf buf, CallbackInfo ci) {
+    private void readNet(RegistryFriendlyByteBuf buf, CallbackInfo ci) {
         consumeFluid = buf.readEnum(Tristate.class);
     }
 }

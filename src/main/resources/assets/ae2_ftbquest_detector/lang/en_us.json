@@ -4,5 +4,7 @@
   "ae2-ftbquests-detector.detector.uncharged": "Device Unconnected",
   "ae2-ftbquests-detector.detector.no_owner": "No Owner Device",
   "ae2-ftbquests-detector.detector.owner_is": "Owner Team is %s",
-  "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist"
+  "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist",
+  "ae2_ftbquest_detector.configuration.enableDetector": "Enable Detector",
+  "ae2_ftbquest_detector.configuration.detectorTickRate": "Detector Scan Rate (Ticks)"
 }
