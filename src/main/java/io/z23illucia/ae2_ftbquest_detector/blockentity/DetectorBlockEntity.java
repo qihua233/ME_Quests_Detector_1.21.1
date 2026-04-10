@@ -266,15 +266,18 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         super.onReady();
         getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
         requestReconnect();
+        DetectorEntityList.register(this);
     }
 
     @Override
     public void onChunkUnloaded() {
+        DetectorEntityList.unregister(this);
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
+        DetectorEntityList.unregister(this);
         super.setRemoved();
     }
 
