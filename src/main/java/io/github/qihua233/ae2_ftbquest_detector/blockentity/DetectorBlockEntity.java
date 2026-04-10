@@ -65,9 +65,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     @Override
     protected IManagedGridNode createMainNode() {
         return super.createMainNode()
-                .setInWorldNode(true)
-                .setTagName("detector")
-                .setVisualRepresentation(io.github.qihua233.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM.get())
                 .setIdlePowerUsage(1.0)
                 .setExposedOnSides(EnumSet.allOf(Direction.class))
                 .addService(IStorageWatcherNode.class, this);
@@ -127,6 +124,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         List<Task> relevantTasks = cachedTasksByKey.get(key);
         if (relevantTasks != null) {
             for (Task task : relevantTasks) {
+                if (task.consumesResources()) {
+                    continue;
+                }
                 if (data.canStartTasks(task.getQuest())) {
                     long c = Math.min(task.getMaxProgress(), num);
                     if (c > data.getProgress(task)) {
@@ -170,6 +170,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
         
         for (Task task : tasksToCheck) {
+            if (task.consumesResources()) {
+                continue;
+            }
             if (task instanceof FluidTask fluidTask) {
                 AEFluidKey fluidKey = AEFluidKey.of(fluidTask.getFluid());
                 cachedTasksByKey.computeIfAbsent(fluidKey, k -> new ArrayList<>()).add(task);
@@ -245,6 +248,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
             {
                 List<Task> relevantTasks = cachedTasksByKey.get(key);
                 for (Task task : relevantTasks) {
+                    if (task.consumesResources()) {
+                        continue;
+                    }
                     if (data.canStartTasks(task.getQuest())) {
                         long num = keyCounter.get(key);
                         long c = Math.min(task.getMaxProgress(), num);

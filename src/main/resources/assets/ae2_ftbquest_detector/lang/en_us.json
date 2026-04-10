@@ -7,6 +7,9 @@
   "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist",
   "ae2_ftbquest_detector.configuration.enableDetector": "Enable Detector",
   "ae2_ftbquest_detector.configuration.detectorTickRate": "Detector Scan Rate (Ticks)",
+  "ae2_ftbquest_detector.configuration.title": "AE2 Quests Detector Config",
+  "ae2_ftbquest_detector.configuration.jadeShowOwnerInfo": "Show Owner Team In Jade",
+  "ae2_ftbquest_detector.configuration.jadeShowTaskProgress": "Show Task Progress In Jade",
   "ae2-ftbquests-detector.jade.tasks": "Tasks: %d / %d",
   "config.jade.plugin_ae2_ftbquest_detector.detector": "Detector Extra Info"
 }

@@ -10,6 +10,8 @@ public class Config {
 
     public static final ModConfigSpec.BooleanValue ENABLE_DETECTOR;
     public static final ModConfigSpec.IntValue DETECTOR_TICK_RATE;
+    public static final ModConfigSpec.BooleanValue JADE_SHOW_OWNER_INFO;
+    public static final ModConfigSpec.BooleanValue JADE_SHOW_TASK_PROGRESS;
 
     static {
         BUILDER.push("General");
@@ -22,6 +24,14 @@ public class Config {
                 .comment("How often (in ticks) the detector should perform a full scan of the AE2 network. Default: 20 (1 second)")
                 .defineInRange("detectorTickRate", 20, 10, 1200);
 
+        JADE_SHOW_OWNER_INFO = BUILDER
+                .comment("Show owner team information in Jade tooltip")
+                .define("jadeShowOwnerInfo", true);
+
+        JADE_SHOW_TASK_PROGRESS = BUILDER
+                .comment("Show task completion progress in Jade tooltip")
+                .define("jadeShowTaskProgress", true);
+
         BUILDER.pop();
     }
 
@@ -29,12 +39,16 @@ public class Config {
 
     public static boolean enableDetector;
     public static int detectorTickRate;
+    public static boolean jadeShowOwnerInfo;
+    public static boolean jadeShowTaskProgress;
 
     @SubscribeEvent
     public static void onLoad(final ModConfigEvent event) {
         if (event.getConfig().getSpec() == SPEC) {
             enableDetector = ENABLE_DETECTOR.get();
             detectorTickRate = DETECTOR_TICK_RATE.get();
+            jadeShowOwnerInfo = JADE_SHOW_OWNER_INFO.get();
+            jadeShowTaskProgress = JADE_SHOW_TASK_PROGRESS.get();
         }
     }
 }

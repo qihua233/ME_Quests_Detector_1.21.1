@@ -5,6 +5,7 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.api.Team;
+import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -16,6 +17,7 @@ import snownee.jade.api.ITooltip;
 import snownee.jade.api.config.IPluginConfig;
 
 import java.util.Optional;
+import java.util.Objects;
 
 public class DetectorProvider implements IBlockComponentProvider, IServerDataProvider<BlockAccessor> {
     public static final DetectorProvider INSTANCE = new DetectorProvider();
@@ -23,21 +25,23 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
 
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
-        boolean isPowered = accessor.getBlockState().getValue(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED);
+        boolean isPowered = accessor.getBlockState().getValue(Objects.requireNonNull(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED));
         if (!isPowered) {
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.uncharged"));
             return;
         }
 
         CompoundTag data = accessor.getServerData();
-        if (data.contains("TeamName")) {
-            String teamName = data.getString("TeamName");
-            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName));
-        } else {
-            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.no_owner"));
+        if (Config.jadeShowOwnerInfo) {
+            if (data.contains("TeamName")) {
+                String teamName = data.getString("TeamName");
+                tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName));
+            } else {
+                tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.no_owner"));
+            }
         }
 
-        if (data.contains("CompletedTasks")) {
+        if (Config.jadeShowTaskProgress && data.contains("CompletedTasks")) {
             int completed = data.getInt("CompletedTasks");
             int total = data.getInt("TotalTasks");
             tooltip.add(Component.translatable("ae2-ftbquests-detector.jade.tasks", completed, total));
@@ -49,9 +53,11 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
         if (accessor.getBlockEntity() instanceof DetectorBlockEntity detector) {
             if (detector.ownerTeamId != null) {
                 Optional<Team> team = FTBTeamsAPI.api().getManager().getTeamByID(detector.ownerTeamId);
-                team.ifPresent(t -> data.putString("TeamName", t.getName().getString()));
+                if (Config.jadeShowOwnerInfo) {
+                    team.ifPresent(t -> data.putString("TeamName", Objects.requireNonNull(t.getName().getString())));
+                }
 
-                if (ServerQuestFile.INSTANCE != null) {
+                if (Config.jadeShowTaskProgress && ServerQuestFile.INSTANCE != null) {
                     TeamData teamData = ServerQuestFile.INSTANCE.getNullableTeamData(detector.ownerTeamId);
                     if (teamData != null) {
                         int completed = 0;

@@ -1,5 +1,6 @@
 package io.github.qihua233.ae2_ftbquest_detector;
 
+import io.github.qihua233.ae2_ftbquest_detector.client.DetectorConfigScreen;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlocks;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
@@ -14,7 +15,9 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import appeng.api.AECapabilities;
 import appeng.api.networking.IInWorldGridNodeHost;
 
@@ -41,6 +44,10 @@ public class Ae2_ftbquest_detector {
         modEventBus.addListener(this::registerCapabilities);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+        if (FMLEnvironment.dist.isClient()) {
+            modContainer.registerExtensionPoint(IConfigScreenFactory.class,
+                    (container, parent) -> new DetectorConfigScreen(parent));
+        }
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
