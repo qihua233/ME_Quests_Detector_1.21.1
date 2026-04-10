@@ -1,9 +1,9 @@
-package io.z23illucia.ae2_ftbquest_detector.block;
+package io.github.qihua233.ae2_ftbquest_detector.block;
 
 
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.api.Team;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -139,7 +139,7 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
-                java.util.UUID teamId = stack.get(io.z23illucia.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
+                java.util.UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
                 if (teamId != null) {
                     d.ownerTeamId = teamId;
                     d.markCacheDirty();

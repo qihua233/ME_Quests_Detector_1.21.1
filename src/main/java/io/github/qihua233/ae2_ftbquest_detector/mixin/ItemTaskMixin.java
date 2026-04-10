@@ -1,8 +1,8 @@
-package io.z23illucia.ae2_ftbquest_detector.mixin;
+package io.github.qihua233.ae2_ftbquest_detector.mixin;
 import dev.ftb.mods.ftbquests.item.MissingItem;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
-import io.z23illucia.ae2_ftbquest_detector.utility.SubmitHelper;
+import io.github.qihua233.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;
@@ -33,7 +33,7 @@ public class ItemTaskMixin {
                 && !(self.getItemStack().getItem() instanceof MissingItem)
         )
         {
-            //System.out.println("consume注入点");
+            //System.out.println("consume注入�?);
             SubmitHelper.submitTask(teamData, player, self);
 
         }

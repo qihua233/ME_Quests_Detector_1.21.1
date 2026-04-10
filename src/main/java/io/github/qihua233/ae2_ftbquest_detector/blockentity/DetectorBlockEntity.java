@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector.blockentity;
+package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
 
 import appeng.api.networking.*;
@@ -16,8 +16,8 @@ import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
-import io.z23illucia.ae2_ftbquest_detector.block.DetectorBlock;
-import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
+import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -118,8 +118,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (data == null || data.isLocked()) return;
 
 
-        // 只检查与当前key相关的任务
-        List<Task> relevantTasks = cachedTasksByKey.get(key);
+        // 只检查与当前key相关的任�?        List<Task> relevantTasks = cachedTasksByKey.get(key);
         if (relevantTasks != null) {
             for (Task task : relevantTasks) {
                 if (data.canStartTasks(task.getQuest())) {
@@ -138,7 +137,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public void tick() {
         if (this.isRemoved() || this.level == null) return;
         
-        tickCount = (tickCount + 1 ) % io.z23illucia.ae2_ftbquest_detector.Config.detectorTickRate;
+        tickCount = (tickCount + 1 ) % io.github.qihua233.ae2_ftbquest_detector.Config.detectorTickRate;
         if(tickCount == 0)
         {
             if (reconnectPending) {
@@ -207,9 +206,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         this.stateDirty = true;
     }
     /**
-     * 主动扫描整个库存并检测所有相关任务
-     * 适用于外部调用的完整检测
-     */
+     * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
     public void performFullDetection() {
         performFullDetectionInternal();
     }

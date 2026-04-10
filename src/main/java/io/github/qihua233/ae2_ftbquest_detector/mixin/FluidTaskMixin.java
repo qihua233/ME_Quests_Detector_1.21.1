@@ -1,10 +1,10 @@
-package io.z23illucia.ae2_ftbquest_detector.mixin;
+package io.github.qihua233.ae2_ftbquest_detector.mixin;
 
 import dev.ftb.mods.ftblibrary.config.ConfigGroup;
 import dev.ftb.mods.ftblibrary.config.Tristate;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
-import io.z23illucia.ae2_ftbquest_detector.utility.IFluidTaskExtension;
+import io.github.qihua233.ae2_ftbquest_detector.utility.IFluidTaskExtension;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;

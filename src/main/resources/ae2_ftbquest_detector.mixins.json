@@ -1,7 +1,7 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "io.z23illucia.ae2_ftbquest_detector.mixin",
+  "package": "io.github.qihua233.ae2_ftbquest_detector.mixin",
   "compatibilityLevel": "JAVA_8",
   "refmap": "ae2_ftbquest_detector.refmap.json",
   "mixins": [

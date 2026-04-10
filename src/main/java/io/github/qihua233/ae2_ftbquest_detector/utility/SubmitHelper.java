@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector.utility;
+package io.github.qihua233.ae2_ftbquest_detector.utility;
 
 import appeng.api.config.Actionable;
 import appeng.api.networking.security.IActionSource;
@@ -9,7 +9,7 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import net.minecraft.server.level.ServerPlayer;
 
 public class SubmitHelper {

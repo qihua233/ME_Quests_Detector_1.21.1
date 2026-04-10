@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector.registry;
+package io.github.qihua233.ae2_ftbquest_detector.registry;
 
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.BlockItem;
@@ -8,7 +8,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import java.util.function.Supplier;
 
-import static io.z23illucia.ae2_ftbquest_detector.Ae2_ftbquest_detector.MODID;
+import static io.github.qihua233.ae2_ftbquest_detector.Ae2_ftbquest_detector.MODID;
 
 @SuppressWarnings("null")
 public class ModItems {

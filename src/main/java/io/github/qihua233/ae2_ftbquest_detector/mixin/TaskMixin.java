@@ -1,9 +1,9 @@
-package io.z23illucia.ae2_ftbquest_detector.mixin;
+package io.github.qihua233.ae2_ftbquest_detector.mixin;
 
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import io.z23illucia.ae2_ftbquest_detector.utility.SubmitHelper;
+import io.github.qihua233.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Mixin;

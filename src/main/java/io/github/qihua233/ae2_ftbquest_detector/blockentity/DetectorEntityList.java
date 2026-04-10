@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector.blockentity;
+package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
 import java.util.Collections;
 import java.util.Set;

@@ -1,9 +1,9 @@
-package io.z23illucia.ae2_ftbquest_detector;
+package io.github.qihua233.ae2_ftbquest_detector;
 
-import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
-import io.z23illucia.ae2_ftbquest_detector.registry.ModBlocks;
-import io.z23illucia.ae2_ftbquest_detector.registry.ModItems;
-import io.z23illucia.ae2_ftbquest_detector.registry.ModDataComponents;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlocks;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;

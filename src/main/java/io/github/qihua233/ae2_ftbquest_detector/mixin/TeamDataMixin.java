@@ -1,8 +1,8 @@
-package io.z23illucia.ae2_ftbquest_detector.mixin;
+package io.github.qihua233.ae2_ftbquest_detector.mixin;
 
 import dev.ftb.mods.ftbquests.quest.TeamData;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;

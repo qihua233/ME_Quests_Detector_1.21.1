@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector.utility;
+package io.github.qihua233.ae2_ftbquest_detector.utility;
 
 import dev.ftb.mods.ftblibrary.config.Tristate;
 

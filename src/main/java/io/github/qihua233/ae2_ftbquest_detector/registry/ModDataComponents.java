@@ -1,6 +1,6 @@
-package io.z23illucia.ae2_ftbquest_detector.registry;
+package io.github.qihua233.ae2_ftbquest_detector.registry;
 
-import io.z23illucia.ae2_ftbquest_detector.Ae2_ftbquest_detector;
+import io.github.qihua233.ae2_ftbquest_detector.Ae2_ftbquest_detector;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.neoforged.bus.api.IEventBus;

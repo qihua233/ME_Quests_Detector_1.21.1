@@ -1,4 +1,4 @@
-package io.z23illucia.ae2_ftbquest_detector;
+package io.github.qihua233.ae2_ftbquest_detector;
 
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.event.config.ModConfigEvent;
