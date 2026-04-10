@@ -203,9 +203,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public void requestReconnect() {
         this.reconnectPending = true;
         this.stateDirty = true;
-        if (getMainNode().isReady()) {
-            getMainNode().updateState();
-        }
     }
     /**
      * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
