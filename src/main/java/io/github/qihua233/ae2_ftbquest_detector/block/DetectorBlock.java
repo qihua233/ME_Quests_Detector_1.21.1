@@ -84,6 +84,13 @@ public class DetectorBlock extends Block implements EntityBlock {
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {
             var node = detector.getGridNode(null);
+
+            if (node == null || !node.isPowered()) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
+                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
+            }
+
             if(detector.ownerTeamId == null)
             {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.no_owner");
@@ -104,9 +111,7 @@ public class DetectorBlock extends Block implements EntityBlock {
                                 message
                         ));
 
-                        if (node != null && node.isPowered()) {
-                            detector.performFullDetection();
-                        }
+                        detector.performFullDetection();
 
                     }, () -> {
                         Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
@@ -125,11 +130,6 @@ public class DetectorBlock extends Block implements EntityBlock {
                 }
             }
 
-            if ((node == null || !node.isPowered()) && detector.ownerTeamId == null) {
-                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
-                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
-            }
-
         }
         return ItemInteractionResult.SUCCESS;
     }
@@ -139,6 +139,7 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
+                d.setOwner(player);
                 java.util.UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
                 if (teamId != null) {
                     d.ownerTeamId = teamId;

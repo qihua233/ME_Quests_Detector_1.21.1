@@ -14,6 +14,9 @@ import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
+import appeng.api.AECapabilities;
+import appeng.api.networking.IInWorldGridNodeHost;
 
 @Mod(Ae2_ftbquest_detector.MODID)
 @SuppressWarnings("null")
@@ -35,8 +38,17 @@ public class Ae2_ftbquest_detector {
 
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(Config::onLoad);
+        modEventBus.addListener(this::registerCapabilities);
 
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
+    }
+
+    private void registerCapabilities(RegisterCapabilitiesEvent event) {
+        event.registerBlockEntity(
+                AECapabilities.IN_WORLD_GRID_NODE_HOST,
+                ModBlockEntities.DETECTOR_BLOCK_ENTITY.get(),
+                (be, context) -> (IInWorldGridNodeHost) be
+        );
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
