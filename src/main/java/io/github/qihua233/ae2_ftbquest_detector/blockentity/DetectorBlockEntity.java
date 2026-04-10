@@ -118,7 +118,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (data == null || data.isLocked()) return;
 
 
-        // 只检查与当前key相关的任�?        List<Task> relevantTasks = cachedTasksByKey.get(key);
+        // 只检查与当前key相关的任
+        List<Task> relevantTasks = cachedTasksByKey.get(key);
         if (relevantTasks != null) {
             for (Task task : relevantTasks) {
                 if (data.canStartTasks(task.getQuest())) {
@@ -206,7 +207,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         this.stateDirty = true;
     }
     /**
-     * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
+     * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
     public void performFullDetection() {
         performFullDetectionInternal();
     }
