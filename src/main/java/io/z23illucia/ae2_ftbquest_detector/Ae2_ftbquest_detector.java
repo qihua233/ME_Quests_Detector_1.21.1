@@ -12,7 +12,6 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.fml.ModContainer;
@@ -36,8 +35,6 @@ public class Ae2_ftbquest_detector {
         ModDataComponents.register(modEventBus);
 
         CREATIVE_MODE_TABS.register(modEventBus);
-
-        NeoForge.EVENT_BUS.register(Ae2_ftbquest_detector.class);
 
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(Config::onLoad);
