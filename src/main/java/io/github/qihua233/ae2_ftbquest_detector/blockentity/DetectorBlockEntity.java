@@ -64,7 +64,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     @Override
     protected IManagedGridNode createMainNode() {
-        return GridHelper.createManagedNode(this, DetectorBlockEntityListener.INSTANCE)
+        return super.createMainNode()
                 .setFlags(GridFlags.REQUIRE_CHANNEL)
                 .setExposedOnSides(EnumSet.allOf(Direction.class))
                 .addService(IStorageWatcherNode.class, this);
@@ -107,6 +107,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     public void detectTask(AEKey key, long num) {
+        if (!getMainNode().isReady() || !getMainNode().isPowered()) return;
+
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return;
 
@@ -143,10 +145,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         {
             if (reconnectPending) {
                 reconnectPending = false;
-                if (getMainNode().isReady()) {
-                    getMainNode().setExposedOnSides(EnumSet.noneOf(Direction.class));
-                    getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
-                }
                 markCacheDirty();
             }
             if (stateDirty) {
@@ -205,6 +203,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public void requestReconnect() {
         this.reconnectPending = true;
         this.stateDirty = true;
+        if (getMainNode().isReady()) {
+            getMainNode().updateState();
+        }
     }
     /**
      * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
@@ -213,6 +214,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     private boolean performFullDetectionInternal() {
+        if (!getMainNode().isReady() || !getMainNode().isPowered()) return false;
+
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return false;
 
@@ -262,7 +265,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     @Override
     public void onReady() {
         super.onReady();
-        getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
         requestReconnect();
         DetectorEntityList.register(this);
     }
@@ -279,29 +281,18 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         super.setRemoved();
     }
 
-
-
-}
-
-class DetectorBlockEntityListener implements IGridNodeListener<DetectorBlockEntity> {
-    public static final DetectorBlockEntityListener INSTANCE = new DetectorBlockEntityListener();
-
     @Override
-    public void onSaveChanges(DetectorBlockEntity detectorBlockEntity, IGridNode iGridNode) {
-
-    }
-
-    @Override
-    @SuppressWarnings("null")
-    public void onStateChanged(DetectorBlockEntity nodeOwner, IGridNode node, State reason) {
-        var level = nodeOwner.getLevel();
+    public void onMainNodeStateChanged(IGridNodeListener.State reason) {
+        super.onMainNodeStateChanged(reason);
         if (level != null) {
             level.setBlock(
-                    nodeOwner.getBlockPos(),
-                    nodeOwner.getBlockState().setValue(DetectorBlock.POWERED, node.isPowered()),
+                    getBlockPos(),
+                    getBlockState().setValue(DetectorBlock.POWERED, getMainNode().isPowered()),
                     3
             );
+            if (getMainNode().isPowered()) {
+                markStateDirty();
+            }
         }
     }
-
 }
