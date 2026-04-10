@@ -39,7 +39,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean cacheDirty = true;
     private boolean stateDirty = true;
     private boolean reconnectPending = false;
-    private boolean listed = false;
 
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
@@ -137,6 +136,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     int tickCount = 0;
 
     public void tick() {
+        if (this.isRemoved() || this.level == null) return;
+        
         tickCount = (tickCount + 1 ) % io.z23illucia.ae2_ftbquest_detector.Config.detectorTickRate;
         if(tickCount == 0)
         {
@@ -265,27 +266,15 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         super.onReady();
         getMainNode().setExposedOnSides(EnumSet.allOf(Direction.class));
         requestReconnect();
-        if (!listed) {
-            DetectorEntityList.register(this);
-            listed = true;
-        }
     }
 
     @Override
     public void onChunkUnloaded() {
-        if (listed) {
-            DetectorEntityList.unregister(this);
-            listed = false;
-        }
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
-        if (listed) {
-            DetectorEntityList.unregister(this);
-            listed = false;
-        }
         super.setRemoved();
     }
 

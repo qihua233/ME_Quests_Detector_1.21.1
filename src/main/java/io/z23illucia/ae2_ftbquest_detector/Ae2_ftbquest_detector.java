@@ -1,7 +1,5 @@
 package io.z23illucia.ae2_ftbquest_detector;
 
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
-import io.z23illucia.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModBlocks;
 import io.z23illucia.ae2_ftbquest_detector.registry.ModItems;
@@ -16,7 +14,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
@@ -57,10 +54,4 @@ public class Ae2_ftbquest_detector {
         }
     }
 
-    @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Pre event) {
-        DetectorEntityList.getAll().forEach(
-                DetectorBlockEntity::tick
-        );
-    }
 }
