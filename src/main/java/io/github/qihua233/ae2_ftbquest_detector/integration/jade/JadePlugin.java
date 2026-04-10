@@ -10,7 +10,7 @@ import snownee.jade.api.WailaPlugin;
 @WailaPlugin
 public class JadePlugin implements IWailaPlugin {
     @Override
-    public void registerCommon(IWailaCommonRegistration registration) {
+    public void register(IWailaCommonRegistration registration) {
         registration.registerBlockDataProvider(DetectorProvider.INSTANCE, DetectorBlockEntity.class);
     }
 

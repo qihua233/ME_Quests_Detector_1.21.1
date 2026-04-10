@@ -83,14 +83,6 @@ public class DetectorBlock extends Block implements EntityBlock {
 
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {
-            var node = detector.getGridNode(null);
-
-            if (node == null || !node.isActive()) {
-                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
-                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
-                return ItemInteractionResult.SUCCESS;
-            }
-
             if(detector.ownerTeamId == null)
             {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.no_owner");

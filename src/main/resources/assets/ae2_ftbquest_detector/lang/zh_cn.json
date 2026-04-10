@@ -7,5 +7,6 @@
   "ae2-ftbquests-detector.detector.invalid_owner": "所属队伍不存在",
   "ae2_ftbquest_detector.configuration.enableDetector": "启用探测器",
   "ae2_ftbquest_detector.configuration.detectorTickRate": "探测器扫描频率 (Ticks)",
-  "ae2-ftbquests-detector.jade.tasks": "已完成任务: %d / %d"
+  "ae2-ftbquests-detector.jade.tasks": "已完成任务: %d / %d",
+  "config.jade.plugin_ae2_ftbquest_detector.detector": "检测器扩展信息"
 }
