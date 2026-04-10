@@ -107,7 +107,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     public void detectTask(AEKey key, long num) {
-        if (!getMainNode().isReady() || !getMainNode().isPowered()) return;
+        if (!getMainNode().isReady() || !getMainNode().isActive()) return;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return;
@@ -211,7 +211,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     private boolean performFullDetectionInternal() {
-        if (!getMainNode().isReady() || !getMainNode().isPowered()) return false;
+        if (!getMainNode().isReady() || !getMainNode().isActive()) return false;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return false;
@@ -282,12 +282,13 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public void onMainNodeStateChanged(IGridNodeListener.State reason) {
         super.onMainNodeStateChanged(reason);
         if (level != null) {
+            boolean active = getMainNode().isActive();
             level.setBlock(
                     getBlockPos(),
-                    getBlockState().setValue(DetectorBlock.POWERED, getMainNode().isPowered()),
+                    getBlockState().setValue(DetectorBlock.POWERED, active),
                     3
             );
-            if (getMainNode().isPowered()) {
+            if (active) {
                 markStateDirty();
             }
         }
