@@ -65,7 +65,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     @Override
     protected IManagedGridNode createMainNode() {
         return super.createMainNode()
-                .setFlags(GridFlags.REQUIRE_CHANNEL)
+                .setVisualRepresentation(io.github.qihua233.ae2_ftbquest_detector.registry.ModItems.DETECTOR_BLOCK_ITEM.get())
+                .setIdlePowerUsage(1.0)
                 .setExposedOnSides(EnumSet.allOf(Direction.class))
                 .addService(IStorageWatcherNode.class, this);
     }

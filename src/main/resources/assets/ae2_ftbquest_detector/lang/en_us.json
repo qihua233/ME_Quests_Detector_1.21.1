@@ -6,5 +6,6 @@
   "ae2-ftbquests-detector.detector.owner_is": "Owner Team is %s",
   "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist",
   "ae2_ftbquest_detector.configuration.enableDetector": "Enable Detector",
-  "ae2_ftbquest_detector.configuration.detectorTickRate": "Detector Scan Rate (Ticks)"
+  "ae2_ftbquest_detector.configuration.detectorTickRate": "Detector Scan Rate (Ticks)",
+  "ae2-ftbquests-detector.jade.tasks": "Tasks: %d / %d"
 }
