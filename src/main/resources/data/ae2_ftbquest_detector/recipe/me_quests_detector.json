@@ -1,0 +1,23 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "ZXZ",
+    "XYX",
+    "ZXZ"
+  ],
+  "key": {
+    "X": {
+      "item": "ae2:fluix_crystal"
+    },
+    "Y": {
+      "item": "ftbquests:book"
+    },
+    "Z": {
+      "item": "minecraft:iron_ingot"
+    }
+  },
+  "result": {
+    "id": "ae2_ftbquest_detector:me_quests_detector",
+    "count": 1
+  }
+}

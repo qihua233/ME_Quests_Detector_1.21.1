@@ -37,7 +37,7 @@ public class DetectorBlock extends Block implements EntityBlock {
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
 
     public DetectorBlock() {
-        super(BlockBehaviour.Properties.of().strength(1.5f));
+        super(BlockBehaviour.Properties.of().strength(0.8f));
         this.registerDefaultState(this.stateDefinition.any()
                 .setValue(POWERED, false));
     }
