@@ -1,7 +1,7 @@
 {
   "block.ae2_ftbquest_detector.me_quests_detector": "ME任务检测器",
   "ftbquests.task.ftbquests.fluid.consume_fluid": "消耗流体",
-  "ae2-ftbquests-detector.detector.uncharged": "设备未连接",
+  "ae2-ftbquests-detector.detector.uncharged": "设备离线",
   "ae2-ftbquests-detector.detector.no_owner": "无所属队伍",
   "ae2-ftbquests-detector.detector.owner_is": "所属队伍： %s",
   "ae2-ftbquests-detector.detector.invalid_owner": "所属队伍不存在",

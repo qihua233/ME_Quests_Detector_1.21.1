@@ -78,6 +78,9 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (level.isClientSide || !(player instanceof ServerPlayer)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
+        if (!state.getValue(POWERED)) {
+            return ItemInteractionResult.SUCCESS;
+        }
 
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {

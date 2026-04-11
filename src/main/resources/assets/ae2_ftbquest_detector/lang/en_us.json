@@ -1,7 +1,7 @@
 {
   "block.ae2_ftbquest_detector.me_quests_detector": "ME Quests Detector",
   "ftbquests.task.ftbquests.fluid.consume_fluid": "Consume Fluid",
-  "ae2-ftbquests-detector.detector.uncharged": "Device Unconnected",
+  "ae2-ftbquests-detector.detector.uncharged": "Device Offline",
   "ae2-ftbquests-detector.detector.no_owner": "No Owner Device",
   "ae2-ftbquests-detector.detector.owner_is": "Owner Team is %s",
   "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist",

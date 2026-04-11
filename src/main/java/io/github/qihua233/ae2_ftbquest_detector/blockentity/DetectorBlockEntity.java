@@ -17,6 +17,7 @@ import dev.ftb.mods.ftbquests.quest.task.Task;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
+import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -74,7 +75,10 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     @Override
     protected IManagedGridNode createMainNode() {
         return super.createMainNode()
-                .setIdlePowerUsage(1.0)
+                .setTagName("detector")
+                .setInWorldNode(true)
+                .setVisualRepresentation(ModItems.DETECTOR_BLOCK_ITEM.get())
+                .setIdlePowerUsage(4.0)
                 .setExposedOnSides(EnumSet.allOf(Direction.class))
                 .addService(IStorageWatcherNode.class, this);
     }
