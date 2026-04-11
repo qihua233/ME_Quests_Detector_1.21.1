@@ -14,7 +14,6 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
@@ -39,6 +38,16 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean cacheDirty = true;
     private boolean stateDirty = true;
     private boolean reconnectPending = false;
+
+    private static boolean isFtbRuntimeAvailable() {
+        try {
+            Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
+            Class.forName("dev.ftb.mods.ftbteams.data.TeamManagerImpl");
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
 
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
@@ -92,12 +101,15 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     public void setOwnerTeam(Player player)
     {
-        FTBTeamsAPI.api().getManager().getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
-                {
-                    ownerTeamId = team.getId();
-                    markCacheDirty();
-                }
-                );
+        try {
+            TeamManagerImpl.INSTANCE.getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
+                    {
+                        ownerTeamId = team.getId();
+                        markCacheDirty();
+                    }
+                    );
+        } catch (Throwable ignored) {
+        }
 
     }
 
@@ -107,6 +119,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     public void detectTask(AEKey key, long num) {
+        if (!isFtbRuntimeAvailable()) return;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
@@ -142,6 +155,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     public void tick() {
         if (this.isRemoved() || this.level == null) return;
+        if (!isFtbRuntimeAvailable()) return;
         
         tickCount = (tickCount + 1 ) % io.github.qihua233.ae2_ftbquest_detector.Config.detectorTickRate;
         if(tickCount == 0)
@@ -217,6 +231,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     private boolean performFullDetectionInternal() {
+        if (!isFtbRuntimeAvailable()) return false;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return false;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;

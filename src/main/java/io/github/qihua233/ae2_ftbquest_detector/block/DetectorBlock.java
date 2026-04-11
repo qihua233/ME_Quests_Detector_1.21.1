@@ -1,8 +1,7 @@
 package io.github.qihua233.ae2_ftbquest_detector.block;
 
 
-import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
-import dev.ftb.mods.ftbteams.api.Team;
+import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -30,7 +29,6 @@ import net.minecraft.world.ItemInteractionResult;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
-import java.util.Optional;
 
 
 @SuppressWarnings("null")
@@ -93,27 +91,22 @@ public class DetectorBlock extends Block implements EntityBlock {
             else
             {
                 try {
-                    Optional<Team> optionalTeam = FTBTeamsAPI
-                            .api()
-                            .getManager()
-                            .getTeamByID(detector.ownerTeamId);
-                    optionalTeam.ifPresentOrElse(team -> {
+                    var team = TeamManagerImpl.INSTANCE.getTeamMap().get(detector.ownerTeamId);
+                    if (team != null) {
                         Component message = Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString());
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
                                 message
                         ));
 
                         detector.performFullDetection();
-
-                    }, () -> {
+                    } else {
                         Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
                                 message
                         ));
-
-                    });
+                    }
                 }
-                catch (Exception e)
+                catch (Throwable e)
                 {
                     Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                     ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
