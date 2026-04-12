@@ -18,6 +18,7 @@ import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,6 +35,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     public IStackWatcher stackWatcher;
     public UUID ownerTeamId;
+    public String ownerTeamNameCache;
+    public Set<UUID> shortNameWarnedPlayers = new HashSet<>();
 
     private Map<AEKey, List<Task>> cachedTasksByKey = new HashMap<>();
     private boolean cacheDirty = true;
@@ -56,6 +59,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (ownerTeamId != null) {
             tag.putUUID("TeamId", ownerTeamId);
         }
+        if (ownerTeamNameCache != null && !ownerTeamNameCache.isBlank()) {
+            tag.putString("TeamNameCache", ownerTeamNameCache);
+        }
     }
 
     @Override
@@ -69,7 +75,16 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         super.loadTag(tag, registries);
         if (tag.hasUUID("TeamId")) {
             ownerTeamId = tag.getUUID("TeamId");
+        } else {
+            ownerTeamId = null;
         }
+        if (tag.contains("TeamNameCache")) {
+            String value = tag.getString("TeamNameCache").trim();
+            ownerTeamNameCache = value.isEmpty() ? null : value;
+        } else {
+            ownerTeamNameCache = null;
+        }
+        shortNameWarnedPlayers.clear();
     }
 
     @Override
@@ -109,6 +124,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
             TeamManagerImpl.INSTANCE.getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
                     {
                         ownerTeamId = team.getId();
+                        ownerTeamNameCache = TeamDisplayNameResolver.resolveRawTeamName(ownerTeamId, null);
+                        shortNameWarnedPlayers.clear();
                         markCacheDirty();
                     }
                     );

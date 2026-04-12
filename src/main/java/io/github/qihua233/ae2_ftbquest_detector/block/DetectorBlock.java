@@ -1,8 +1,8 @@
 package io.github.qihua233.ae2_ftbquest_detector.block;
 
 
-import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -75,6 +75,12 @@ public class DetectorBlock extends Block implements EntityBlock {
     @Override
     protected ItemInteractionResult useItemOn(@NotNull ItemStack stack, @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
                                  @NotNull Player player, @NotNull InteractionHand hand, @NotNull BlockHitResult hit) {
+        if (hand != InteractionHand.MAIN_HAND) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+        if (!stack.isEmpty()) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
         if (level.isClientSide || !(player instanceof ServerPlayer)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
@@ -94,12 +100,17 @@ public class DetectorBlock extends Block implements EntityBlock {
             else
             {
                 try {
-                    var team = TeamManagerImpl.INSTANCE.getTeamMap().get(detector.ownerTeamId);
-                    if (team != null) {
-                        Component message = Component.translatable("ae2-ftbquests-detector.detector.owner_is", team.getName().getString());
-                        ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                    String teamName = TeamDisplayNameResolver.resolveExistingTeamName(detector.ownerTeamId, detector.ownerTeamNameCache);
+                    if (teamName != null) {
+                        Component message = Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName);
+                        ServerPlayer serverPlayer = (ServerPlayer) player;
+                        serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(
                                 message
                         ));
+                        if (!detector.shortNameWarnedPlayers.contains(serverPlayer.getUUID()) && TeamDisplayNameResolver.isTeamNameTooShort(detector.ownerTeamId, detector.ownerTeamNameCache, 3)) {
+                            serverPlayer.displayClientMessage(Component.translatable("ae2-ftbquests-detector.detector.team_name_too_short"), false);
+                            detector.shortNameWarnedPlayers.add(serverPlayer.getUUID());
+                        }
 
                         detector.performFullDetection();
                     } else {
@@ -131,6 +142,8 @@ public class DetectorBlock extends Block implements EntityBlock {
                 java.util.UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
                 if (teamId != null) {
                     d.ownerTeamId = teamId;
+                    d.ownerTeamNameCache = TeamDisplayNameResolver.resolveRawTeamName(teamId, null);
+                    d.shortNameWarnedPlayers.clear();
                     d.markCacheDirty();
                 } else {
                     d.setOwnerTeam(player);

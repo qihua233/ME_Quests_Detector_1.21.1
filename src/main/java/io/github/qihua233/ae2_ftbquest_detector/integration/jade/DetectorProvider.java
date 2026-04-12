@@ -3,9 +3,9 @@ package io.github.qihua233.ae2_ftbquest_detector.integration.jade;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -64,9 +64,9 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
         if (accessor.getBlockEntity() instanceof DetectorBlockEntity detector) {
             if (detector.ownerTeamId != null) {
                 if (Config.jadeShowOwnerInfo) {
-                    var team = TeamManagerImpl.INSTANCE.getTeamMap().get(detector.ownerTeamId);
-                    if (team != null) {
-                        data.putString("TeamName", Objects.requireNonNull(team.getName().getString()));
+                    String teamName = TeamDisplayNameResolver.resolveExistingTeamName(detector.ownerTeamId, detector.ownerTeamNameCache);
+                    if (teamName != null) {
+                        data.putString("TeamName", teamName);
                     }
                 }
 
