@@ -5,6 +5,7 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -15,20 +16,20 @@ import snownee.jade.api.IServerDataProvider;
 import snownee.jade.api.ITooltip;
 import snownee.jade.api.config.IPluginConfig;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class DetectorProvider implements IBlockComponentProvider, IServerDataProvider<BlockAccessor> {
     public static final DetectorProvider INSTANCE = new DetectorProvider();
     public static final ResourceLocation UID = ResourceLocation.fromNamespaceAndPath("ae2_ftbquest_detector", "detector");
 
-    private static boolean isFtbRuntimeAvailable() {
-        try {
-            Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
-            Class.forName("dev.ftb.mods.ftbteams.data.TeamManagerImpl");
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
+    private static final long JADE_TASK_STATS_TTL_MS = 1000L;
+    private static ServerQuestFile jadeTaskStatsFileRef;
+    private static final ConcurrentHashMap<UUID, JadeTaskStats> JADE_TASK_STATS = new ConcurrentHashMap<>();
+
+    private record JadeTaskStats(long expireAtMs, int completed, int total) {
     }
 
     @Override
@@ -58,7 +59,7 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
 
     @Override
     public void appendServerData(CompoundTag data, BlockAccessor accessor) {
-        if (!isFtbRuntimeAvailable()) {
+        if (!FtbRuntime.isAvailable()) {
             return;
         }
         if (accessor.getBlockEntity() instanceof DetectorBlockEntity detector) {
@@ -73,20 +74,36 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
                 if (Config.jadeShowTaskProgress && ServerQuestFile.INSTANCE != null) {
                     TeamData teamData = ServerQuestFile.INSTANCE.getNullableTeamData(detector.ownerTeamId);
                     if (teamData != null) {
-                        int completed = 0;
-                        int total = 0;
-                        for (Task task : ServerQuestFile.INSTANCE.getAllTasks()) {
-                            total++;
-                            if (teamData.isCompleted(task)) {
-                                completed++;
-                            }
-                        }
-                        data.putInt("CompletedTasks", completed);
-                        data.putInt("TotalTasks", total);
+                        JadeTaskStats stats = computeOrGetCachedTaskStats(ServerQuestFile.INSTANCE, teamData, detector.ownerTeamId);
+                        data.putInt("CompletedTasks", stats.completed);
+                        data.putInt("TotalTasks", stats.total);
                     }
                 }
             }
         }
+    }
+
+    private static JadeTaskStats computeOrGetCachedTaskStats(ServerQuestFile file, TeamData teamData, UUID teamId) {
+        long now = System.currentTimeMillis();
+        if (jadeTaskStatsFileRef != file) {
+            JADE_TASK_STATS.clear();
+            jadeTaskStatsFileRef = file;
+        }
+        JadeTaskStats cached = JADE_TASK_STATS.get(teamId);
+        if (cached != null && now < cached.expireAtMs) {
+            return cached;
+        }
+        List<Task> tasks = file.getAllTasks();
+        int total = tasks.size();
+        int completed = 0;
+        for (Task task : tasks) {
+            if (teamData.isCompleted(task)) {
+                completed++;
+            }
+        }
+        JadeTaskStats stats = new JadeTaskStats(now + JADE_TASK_STATS_TTL_MS, completed, total);
+        JADE_TASK_STATS.put(teamId, stats);
+        return stats;
     }
 
     @Override

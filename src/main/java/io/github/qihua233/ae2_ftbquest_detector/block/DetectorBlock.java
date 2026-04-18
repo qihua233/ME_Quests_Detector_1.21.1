@@ -2,6 +2,7 @@ package io.github.qihua233.ae2_ftbquest_detector.block;
 
 
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -29,6 +30,7 @@ import net.minecraft.world.ItemInteractionResult;
 import org.jetbrains.annotations.NotNull;
 
 import javax.annotation.Nullable;
+import java.util.UUID;
 
 
 @SuppressWarnings("null")
@@ -138,13 +140,15 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
+                UUID previousTeamId = d.ownerTeamId;
                 d.setOwner(player);
-                java.util.UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
+                UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
                 if (teamId != null) {
                     d.ownerTeamId = teamId;
                     d.ownerTeamNameCache = TeamDisplayNameResolver.resolveRawTeamName(teamId, null);
                     d.shortNameWarnedPlayers.clear();
                     d.markCacheDirty();
+                    DetectorEntityList.notifyOwnerTeamIdChanged(d, previousTeamId);
                 } else {
                     d.setOwnerTeam(player);
                 }

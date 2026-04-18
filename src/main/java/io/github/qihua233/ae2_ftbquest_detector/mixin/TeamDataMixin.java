@@ -18,11 +18,10 @@ public class TeamDataMixin {
             method = "markDirty",
             at = @At("TAIL")
     )
-    public void markDirtyMixin(CallbackInfo ci)
-    {
-        DetectorEntityList.getAll().stream()
-                .filter(d -> d.ownerTeamId.equals(self.getTeamId()))
-                .findFirst()
-                .ifPresent(DetectorBlockEntity::markStateDirty);
+    public void markDirtyMixin(CallbackInfo ci) {
+        var list = DetectorEntityList.copyForTeam(self.getTeamId());
+        if (!list.isEmpty()) {
+            list.getFirst().markStateDirty();
+        }
     }
 }

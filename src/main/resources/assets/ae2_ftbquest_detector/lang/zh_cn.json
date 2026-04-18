@@ -24,6 +24,11 @@
   "ae2_ftbquest_detector.configuration.jadeShowOwnerInfo.tooltip": "在 Jade 提示中显示所属队伍名称。",
   "ae2_ftbquest_detector.configuration.jadeShowTaskProgress": "Jade显示任务完成进度",
   "ae2_ftbquest_detector.configuration.jadeShowTaskProgress.tooltip": "在 Jade 提示中显示已完成/总任务进度。",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode": "队伍名称显示样式",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.tooltip": "在 Jade 与空手使用检测器（快捷栏提示）中如何显示所属队伍。",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_AND_SHORT_ID": "队伍名称 + 短 ID",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_ONLY": "仅队伍名称",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.SHORT_ID_ONLY": "仅队伍短 ID",
   "ae2-ftbquests-detector.jade.tasks": "已完成任务: %d / %d",
   "config.jade.plugin_ae2_ftbquest_detector.detector": "检测器扩展信息"
 }

@@ -33,7 +33,6 @@ public class ItemTaskMixin {
                 && !(self.getItemStack().getItem() instanceof MissingItem)
         )
         {
-            //System.out.println("consume注入�?);
             SubmitHelper.submitTask(teamData, player, self);
 
         }

@@ -23,6 +23,11 @@
   "ae2_ftbquest_detector.configuration.jadeShowOwnerInfo.tooltip": "Show the owner team name in the Jade tooltip.",
   "ae2_ftbquest_detector.configuration.jadeShowTaskProgress": "Show Task Progress In Jade",
   "ae2_ftbquest_detector.configuration.jadeShowTaskProgress.tooltip": "Show completed/total quests progress in the Jade tooltip.",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode": "Team name display",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.tooltip": "How the owner team is shown in Jade and when using the detector (action bar).",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_AND_SHORT_ID": "Name + short id",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_ONLY": "Name only",
+  "ae2_ftbquest_detector.configuration.teamNameDisplayMode.SHORT_ID_ONLY": "Short id only",
   "ae2-ftbquests-detector.jade.tasks": "Tasks: %d / %d",
   "config.jade.plugin_ae2_ftbquest_detector.detector": "Detector Extra Info"
 }

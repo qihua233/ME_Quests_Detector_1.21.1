@@ -3,6 +3,8 @@ package io.github.qihua233.ae2_ftbquest_detector.utility;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.api.property.TeamProperties;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
+import io.github.qihua233.ae2_ftbquest_detector.Config;
+import io.github.qihua233.ae2_ftbquest_detector.TeamNameDisplayMode;
 
 import java.util.Locale;
 import java.util.Map;
@@ -17,11 +19,32 @@ public final class TeamDisplayNameResolver {
     }
 
     public static String resolveExistingTeamName(UUID ownerTeamId, String cachedTeamName) {
+        return resolveExistingTeamName(ownerTeamId, cachedTeamName, Config.teamNameDisplayMode);
+    }
+
+    public static String resolveExistingTeamName(UUID ownerTeamId, String cachedTeamName, TeamNameDisplayMode mode) {
         if (ownerTeamId == null) {
             return null;
         }
+        TeamNameDisplayMode useMode = mode != null ? mode : TeamNameDisplayMode.NAME_AND_SHORT_ID;
         String teamName = resolveRawTeamName(ownerTeamId, cachedTeamName);
         String shortId = toShortTeamId(ownerTeamId);
+
+        return switch (useMode) {
+            case NAME_ONLY -> firstNonBlank(teamName, shortId);
+            case SHORT_ID_ONLY -> firstNonBlank(shortId, teamName);
+            case NAME_AND_SHORT_ID -> formatNameAndShortId(teamName, shortId);
+        };
+    }
+
+    private static String firstNonBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        return fallback;
+    }
+
+    private static String formatNameAndShortId(String teamName, String shortId) {
         if (teamName == null) {
             return shortId;
         }

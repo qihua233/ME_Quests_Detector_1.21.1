@@ -17,10 +17,7 @@ public class SubmitHelper {
     {
         if(!teamData.getFile().isServerSide()) return;
 
-        for(var e: DetectorEntityList.getAll())
-        {
-            if(e.ownerTeamId != null && e.ownerTeamId.equals(teamData.getTeamId()))
-            {
+        for (var e : DetectorEntityList.copyForTeam(teamData.getTeamId())) {
                 var grid = e.getMainNode().getGrid();
                 if (grid == null) {
                     continue;
@@ -65,8 +62,6 @@ public class SubmitHelper {
                         teamData.addProgress(task, extractable);
                     }
                 }
-            }
-
         }
     }
 }

@@ -18,6 +18,7 @@ import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
+import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -42,16 +43,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean cacheDirty = true;
     private boolean stateDirty = true;
     private boolean reconnectPending = false;
-
-    private static boolean isFtbRuntimeAvailable() {
-        try {
-            Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
-            Class.forName("dev.ftb.mods.ftbteams.data.TeamManagerImpl");
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
 
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
@@ -111,15 +102,20 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
 
-
+    /**
+     * Invoked from AE2 while iterating the storage watcher set ({@code StorageService#postWatcherUpdate}).
+     * Do not call {@link #detectTask} or {@link #updateTaskCacheIfNeeded} here: they mutate {@link IStackWatcher}
+     * and cause {@link java.util.ConcurrentModificationException}. {@link MinecraftServer#execute} can also
+     * run the runnable immediately on the server thread, so it does not reliably defer past this iteration.
+     */
     @Override
     public void onStackChange(AEKey key, long l) {
         markStateDirty();
     }
 
 
-    public void setOwnerTeam(Player player)
-    {
+    public void setOwnerTeam(Player player) {
+        UUID previous = this.ownerTeamId;
         try {
             TeamManagerImpl.INSTANCE.getTeamForPlayer((ServerPlayer) player).ifPresent((team) ->
                     {
@@ -128,10 +124,12 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
                         shortNameWarnedPlayers.clear();
                         markCacheDirty();
                     }
-                    );
+            );
         } catch (Throwable ignored) {
         }
-
+        if (!java.util.Objects.equals(previous, this.ownerTeamId)) {
+            DetectorEntityList.notifyOwnerTeamIdChanged(this, previous);
+        }
     }
 
 
@@ -140,13 +138,12 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     public void detectTask(AEKey key, long num) {
-        if (!isFtbRuntimeAvailable()) return;
+        if (!FtbRuntime.isAvailable()) return;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return;
 
-        // 更新缓存（如果需要）
         updateTaskCacheIfNeeded(file);
         if(TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) return;
 
@@ -154,7 +151,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (data == null || data.isLocked()) return;
 
 
-        // 只检查与当前key相关的任
         List<Task> relevantTasks = cachedTasksByKey.get(key);
         if (relevantTasks != null) {
             for (Task task : relevantTasks) {
@@ -176,7 +172,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     public void tick() {
         if (this.isRemoved() || this.level == null) return;
-        if (!isFtbRuntimeAvailable()) return;
+        if (!FtbRuntime.isAvailable()) return;
         
         tickCount = (tickCount + 1 ) % io.github.qihua233.ae2_ftbquest_detector.Config.detectorTickRate;
         if(tickCount == 0)
@@ -198,8 +194,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
         cachedTasksByKey.clear();
         List<Task> tasksToCheck = file.getSubmitTasks();
-        file.markDirty();
-        
+
         if (stackWatcher != null) {
             stackWatcher.reset();
         }
@@ -245,14 +240,13 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         this.reconnectPending = true;
         this.stateDirty = true;
     }
-    /**
-     * 主动扫描整个库存并检测所有相关任�?     * 适用于外部调用的完整检�?     */
+
     public void performFullDetection() {
         performFullDetectionInternal();
     }
 
     private boolean performFullDetectionInternal() {
-        if (!isFtbRuntimeAvailable()) return false;
+        if (!FtbRuntime.isAvailable()) return false;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return false;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;

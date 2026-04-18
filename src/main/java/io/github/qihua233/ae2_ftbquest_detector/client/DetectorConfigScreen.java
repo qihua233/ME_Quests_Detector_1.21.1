@@ -1,24 +1,30 @@
 package io.github.qihua233.ae2_ftbquest_detector.client;
 
 import io.github.qihua233.ae2_ftbquest_detector.Config;
+import io.github.qihua233.ae2_ftbquest_detector.TeamNameDisplayMode;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
+
+import java.util.Arrays;
 
 @SuppressWarnings("null")
 public class DetectorConfigScreen extends Screen {
     private final Screen parent;
     private boolean jadeShowOwnerInfo;
     private boolean jadeShowTaskProgress;
+    private TeamNameDisplayMode teamNameDisplayMode;
 
     public DetectorConfigScreen(Screen parent) {
         super(Component.translatable("ae2_ftbquest_detector.configuration.title"));
         this.parent = parent;
-        this.jadeShowOwnerInfo = Config.JADE_SHOW_OWNER_INFO.get();
-        this.jadeShowTaskProgress = Config.JADE_SHOW_TASK_PROGRESS.get();
+        this.jadeShowOwnerInfo = Config.COMMON_JADE_SHOW_OWNER_INFO.get();
+        this.jadeShowTaskProgress = Config.COMMON_JADE_SHOW_TASK_PROGRESS.get();
+        this.teamNameDisplayMode = Config.COMMON_TEAM_NAME_DISPLAY_MODE.get();
     }
 
     @Override
@@ -36,21 +42,34 @@ public class DetectorConfigScreen extends Screen {
                         Component.translatable("ae2_ftbquest_detector.configuration.jadeShowTaskProgress"),
                         (button, value) -> this.jadeShowTaskProgress = value));
 
+        CycleButton<TeamNameDisplayMode> teamNameModeButton = CycleButton.<TeamNameDisplayMode>builder(
+                        mode -> Component.translatable(
+                                "ae2_ftbquest_detector.configuration.teamNameDisplayMode." + mode.name()))
+                .withValues(Arrays.asList(TeamNameDisplayMode.values()))
+                .withInitialValue(this.teamNameDisplayMode)
+                .create(left, y + 48, 200, 20,
+                        Component.translatable("ae2_ftbquest_detector.configuration.teamNameDisplayMode"),
+                        (button, value) -> this.teamNameDisplayMode = value);
+        teamNameModeButton.setTooltip(Tooltip.create(
+                Component.translatable("ae2_ftbquest_detector.configuration.teamNameDisplayMode.tooltip")));
+        this.addRenderableWidget(teamNameModeButton);
+
         this.addRenderableWidget(Button.builder(CommonComponents.GUI_DONE, b -> this.saveAndClose())
-                .bounds(left, y + 58, 98, 20)
+                .bounds(left, y + 82, 98, 20)
                 .build());
 
         this.addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, b -> this.onClose())
-                .bounds(left + 102, y + 58, 98, 20)
+                .bounds(left + 102, y + 82, 98, 20)
                 .build());
     }
 
     private void saveAndClose() {
-        Config.JADE_SHOW_OWNER_INFO.set(this.jadeShowOwnerInfo);
-        Config.JADE_SHOW_TASK_PROGRESS.set(this.jadeShowTaskProgress);
+        Config.COMMON_JADE_SHOW_OWNER_INFO.set(this.jadeShowOwnerInfo);
+        Config.COMMON_JADE_SHOW_TASK_PROGRESS.set(this.jadeShowTaskProgress);
+        Config.COMMON_TEAM_NAME_DISPLAY_MODE.set(this.teamNameDisplayMode);
         Config.jadeShowOwnerInfo = this.jadeShowOwnerInfo;
         Config.jadeShowTaskProgress = this.jadeShowTaskProgress;
-        Config.SPEC.save();
+        Config.teamNameDisplayMode = this.teamNameDisplayMode;
         this.minecraft.setScreen(this.parent);
     }
 
