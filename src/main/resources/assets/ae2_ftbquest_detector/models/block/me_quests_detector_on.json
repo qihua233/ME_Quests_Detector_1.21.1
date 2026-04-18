@@ -1,6 +1,12 @@
 {
-	"parent": "block/cube_all",
+	"parent": "minecraft:block/cube",
 	"textures": {
-		"all": "ae2_ftbquest_detector:block/me_quests_detector_on"
+		"particle": "ae2_ftbquest_detector:block/me_quests_detector_on_side",
+		"down": "ae2_ftbquest_detector:block/me_quests_detector_on_bottom",
+		"up": "ae2_ftbquest_detector:block/me_quests_detector_on_top",
+		"north": "ae2_ftbquest_detector:block/me_quests_detector_on_side",
+		"east": "ae2_ftbquest_detector:block/me_quests_detector_on_side",
+		"south": "ae2_ftbquest_detector:block/me_quests_detector_on_side",
+		"west": "ae2_ftbquest_detector:block/me_quests_detector_on_side"
 	}
 }

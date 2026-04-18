@@ -18,6 +18,10 @@
 当前仓库基于原作者 LuckyBlock、mmyddd 的项目继续适配与修复。
 项目使用了AI协助。
 
+## 致谢
+
+检测器材质已替换为新版风格，感谢麦淇淋大佬提供的材质支持。
+
 ## 相关仓库
 
 - 原项目：https://github.com/illuciaz23/ME_Quests_Detector
