@@ -1,5 +1,7 @@
 package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
+import appeng.api.networking.IGrid;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -69,6 +71,7 @@ public class DetectorEntityList {
 
     /**
      * Snapshot of detectors owned by {@code teamId}; safe to iterate outside the lock.
+     * Returns a caller-owned mutable list with a single allocation (no defensive copy).
      */
     public static List<DetectorBlockEntity> copyForTeam(UUID teamId) {
         if (teamId == null) {
@@ -79,7 +82,41 @@ public class DetectorEntityList {
             if (set == null || set.isEmpty()) {
                 return List.of();
             }
-            return List.copyOf(new ArrayList<>(set));
+            return new ArrayList<>(set);
+        }
+    }
+
+    /**
+     * Snapshot of all detectors currently attached to {@code grid} (including the caller).
+     * Used to detect multi-detector conflicts on a single AE2 network, similar to how the
+     * AE2 ME Controller refuses to boot when multiple controllers share a network.
+     *
+     * <p>O(N) in the number of tracked detectors; N is small in practice (usually 0–2).
+     */
+    public static List<DetectorBlockEntity> findInGrid(IGrid grid) {
+        if (grid == null) {
+            return List.of();
+        }
+        synchronized (TRACKED_ENTITIES) {
+            List<DetectorBlockEntity> result = null;
+            for (DetectorBlockEntity be : TRACKED_ENTITIES) {
+                if (be == null || be.isRemoved()) {
+                    continue;
+                }
+                IGrid g;
+                try {
+                    g = be.getMainNode().getGrid();
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (g == grid) {
+                    if (result == null) {
+                        result = new ArrayList<>(2);
+                    }
+                    result.add(be);
+                }
+            }
+            return result == null ? List.of() : result;
         }
     }
 }

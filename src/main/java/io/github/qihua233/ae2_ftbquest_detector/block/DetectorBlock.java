@@ -86,11 +86,18 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (level.isClientSide || !(player instanceof ServerPlayer)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
+        BlockEntity be = level.getBlockEntity(pos);
+        if (be instanceof DetectorBlockEntity detector && detector.isNetworkConflict()) {
+            Component message = Component.translatable("ae2-ftbquests-detector.detector.network_conflict");
+            ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                    message
+            ));
+            return ItemInteractionResult.SUCCESS;
+        }
         if (!state.getValue(POWERED)) {
             return ItemInteractionResult.SUCCESS;
         }
 
-        BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector) {
             if(detector.ownerTeamId == null)
             {

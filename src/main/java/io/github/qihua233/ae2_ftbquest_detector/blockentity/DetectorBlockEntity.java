@@ -39,10 +39,33 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public String ownerTeamNameCache;
     public Set<UUID> shortNameWarnedPlayers = new HashSet<>();
 
+    /**
+     * All submit tasks that accept this key type, indexed by the key they want. Rebuilt only when
+     * the quest file itself changes ({@link #cacheDirty}). Acts as the "candidate set" backing
+     * the stack watcher — we still want to watch keys for locked tasks so that later, when the
+     * quest unlocks, we already have up-to-date counters.
+     */
     private Map<AEKey, List<Task>> cachedTasksByKey = new HashMap<>();
+    /**
+     * Sub-view of {@link #cachedTasksByKey} filtered to only currently-actionable tasks: not
+     * consuming, not completed, quest prerequisites satisfied. Rebuilt cheaply whenever
+     * {@link #activeCacheDirty} flips — typically on team progress change via
+     * {@code TeamDataMixin.markDirty}. The hot detection loop iterates this map, so the per-task
+     * {@code canStartTasks} / {@code isCompleted} cost is paid once per invalidation instead of
+     * once per detection tick.
+     */
+    private Map<AEKey, List<Task>> activeTasksByKey = new HashMap<>();
     private boolean cacheDirty = true;
+    private boolean activeCacheDirty = true;
     private boolean stateDirty = true;
     private boolean reconnectPending = false;
+
+    /**
+     * True when more than one detector shares this AE2 network. Mirrors the AE2 ME Controller
+     * behaviour of refusing to boot a network with multiple controllers: a conflicted detector
+     * reports POWERED=false and bails out of every detect/submit path.
+     */
+    private boolean networkConflict = false;
 
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
@@ -137,9 +160,14 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         super(ModBlockEntities.DETECTOR_BLOCK_ENTITY.get(), pos, state);
     }
 
+    public boolean isNetworkConflict() {
+        return networkConflict;
+    }
+
     public void detectTask(AEKey key, long num) {
         if (!FtbRuntime.isAvailable()) return;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return;
+        if (networkConflict) return;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return;
@@ -150,19 +178,16 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         TeamData data = file.getNullableTeamData(ownerTeamId);
         if (data == null || data.isLocked()) return;
 
+        updateActiveCacheIfNeeded(data);
 
-        List<Task> relevantTasks = cachedTasksByKey.get(key);
+        List<Task> relevantTasks = activeTasksByKey.get(key);
         if (relevantTasks != null) {
-            for (Task task : relevantTasks) {
-                if (task.consumesResources()) {
-                    continue;
-                }
-                if (data.canStartTasks(task.getQuest())) {
-                    long c = Math.min(task.getMaxProgress(), num);
-                    if (c > data.getProgress(task)) {
-                        data.setProgress(task, c);
-                        markStateDirty();
-                    }
+            for (int i = 0; i < relevantTasks.size(); i++) {
+                Task task = relevantTasks.get(i);
+                long c = Math.min(task.getMaxProgress(), num);
+                if (c > data.getProgress(task)) {
+                    data.setProgress(task, c);
+                    markStateDirty();
                 }
             }
         }
@@ -180,6 +205,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
             if (reconnectPending) {
                 reconnectPending = false;
                 markCacheDirty();
+            }
+            if (networkConflict) {
+                return;
             }
             if (stateDirty) {
                 stateDirty = !performFullDetectionInternal();
@@ -216,20 +244,52 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
 
         cacheDirty = false;
+        activeCacheDirty = true;
+    }
+
+    /**
+     * Rebuilds {@link #activeTasksByKey} from {@link #cachedTasksByKey} keeping only tasks whose
+     * quest prerequisites are currently satisfied and that are not yet completed. Caller must
+     * have a valid non-null {@link TeamData}. Cheap compared to {@link #updateTaskCacheIfNeeded}:
+     * skips the {@code consumesResources} check (already filtered at cache build), but walks
+     * FTB Quests' {@code canStartTasks} dependency graph once per task.
+     */
+    private void updateActiveCacheIfNeeded(TeamData data) {
+        if (!activeCacheDirty) return;
+
+        activeTasksByKey.clear();
+        for (Map.Entry<AEKey, List<Task>> entry : cachedTasksByKey.entrySet()) {
+            List<Task> all = entry.getValue();
+            List<Task> active = null;
+            for (int i = 0; i < all.size(); i++) {
+                Task task = all.get(i);
+                if (data.isCompleted(task)) continue;
+                if (!data.canStartTasks(task.getQuest())) continue;
+                if (active == null) active = new ArrayList<>(1);
+                active.add(task);
+            }
+            if (active != null) {
+                activeTasksByKey.put(entry.getKey(), active);
+            }
+        }
+
+        activeCacheDirty = false;
     }
 
     public void markCacheDirty() {
         this.cacheDirty = true;
+        this.activeCacheDirty = true;
         this.stateDirty = true;
-        if (this.getMainNode().isReady()) {
-            try {
-                appeng.api.networking.IGrid grid = this.getMainNode().getGrid();
-                if (grid != null) {
-                    grid.getTickManager().wakeDevice(this.getMainNode().getNode());
-                }
-            } catch (Exception e) {
-            }
-        }
+    }
+
+    /**
+     * Invalidates the unlock/completion filter without touching the primary task cache. Called
+     * from {@code TeamDataMixin} on every {@code TeamData.markDirty}: cheap signal, rebuild is
+     * lazy (only happens on the next detection pass).
+     */
+    public void markActiveCacheDirty() {
+        this.activeCacheDirty = true;
+        this.stateDirty = true;
     }
 
     public void markStateDirty() {
@@ -248,6 +308,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean performFullDetectionInternal() {
         if (!FtbRuntime.isAvailable()) return false;
         if (!getMainNode().isReady() || !getMainNode().isActive()) return false;
+        if (networkConflict) return false;
 
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         if (file == null || ownerTeamId == null) return false;
@@ -271,29 +332,28 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         KeyCounter keyCounter = inventory.getAvailableStacks();
         if (keyCounter == null) return true;
 
-        if(keyCounter != null)
-        {
-            boolean progressChanged = false;
-            for(var key:cachedTasksByKey.keySet())
-            {
-                List<Task> relevantTasks = cachedTasksByKey.get(key);
-                for (Task task : relevantTasks) {
-                    if (task.consumesResources()) {
-                        continue;
-                    }
-                    if (data.canStartTasks(task.getQuest())) {
-                        long num = keyCounter.get(key);
-                        long c = Math.min(task.getMaxProgress(), num);
-                        if (c > data.getProgress(task)) {
-                            data.setProgress(task, c);
-                            progressChanged = true;
-                        }
-                    }
+        updateActiveCacheIfNeeded(data);
+        if (activeTasksByKey.isEmpty()) {
+            return true;
+        }
+
+        boolean progressChanged = false;
+        for (Map.Entry<AEKey, List<Task>> entry : activeTasksByKey.entrySet()) {
+            AEKey key = entry.getKey();
+            long num = keyCounter.get(key);
+            if (num <= 0) continue;
+            List<Task> relevantTasks = entry.getValue();
+            for (int i = 0; i < relevantTasks.size(); i++) {
+                Task task = relevantTasks.get(i);
+                long c = Math.min(task.getMaxProgress(), num);
+                if (c > data.getProgress(task)) {
+                    data.setProgress(task, c);
+                    progressChanged = true;
                 }
             }
-            if (progressChanged) {
-                markStateDirty();
-            }
+        }
+        if (progressChanged) {
+            markStateDirty();
         }
         return true;
     }
@@ -307,12 +367,14 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     @Override
     public void onChunkUnloaded() {
+        notifyGridPeersOnLeave();
         DetectorEntityList.unregister(this);
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
+        notifyGridPeersOnLeave();
         DetectorEntityList.unregister(this);
         super.setRemoved();
     }
@@ -320,16 +382,79 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     @Override
     public void onMainNodeStateChanged(IGridNodeListener.State reason) {
         super.onMainNodeStateChanged(reason);
-        if (level != null) {
-            boolean active = getMainNode().isActive();
-            level.setBlock(
-                    getBlockPos(),
-                    getBlockState().setValue(DetectorBlock.POWERED, active),
-                    3
-            );
-            if (active) {
-                markStateDirty();
+        if (level == null) {
+            return;
+        }
+        refreshConflictAndBlockState();
+        // When our own state/grid changes, any peers on the same grid may see a different
+        // conflict count now, so refresh them too. Uses the grid we're currently on.
+        IGrid grid = getMainNode().getGrid();
+        if (grid != null) {
+            List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
+            for (int i = 0; i < peers.size(); i++) {
+                DetectorBlockEntity peer = peers.get(i);
+                if (peer != this) {
+                    peer.refreshConflictAndBlockState();
+                }
             }
+        }
+    }
+
+    /**
+     * Recomputes {@link #networkConflict}, updates the {@link DetectorBlock#POWERED} block state
+     * only when it actually flips (avoids spurious chunk rebuilds on flicker), and triggers a
+     * rescan if we're freshly active and un-conflicted.
+     */
+    public void refreshConflictAndBlockState() {
+        if (level == null || isRemoved()) {
+            return;
+        }
+        boolean nodeActive = getMainNode().isActive();
+        boolean conflict = false;
+        if (nodeActive) {
+            IGrid grid = getMainNode().getGrid();
+            if (grid != null) {
+                List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
+                conflict = peers.size() > 1;
+            }
+        }
+        boolean conflictChanged = conflict != this.networkConflict;
+        this.networkConflict = conflict;
+
+        boolean shouldPower = nodeActive && !conflict;
+        BlockState current = getBlockState();
+        if (current.hasProperty(DetectorBlock.POWERED)
+                && current.getValue(DetectorBlock.POWERED) != shouldPower) {
+            level.setBlock(getBlockPos(), current.setValue(DetectorBlock.POWERED, shouldPower), 3);
+        }
+
+        if (shouldPower) {
+            markStateDirty();
+        }
+        if (conflictChanged) {
+            setChanged();
+        }
+    }
+
+    /**
+     * When this detector is about to leave its grid (chunk unload / removal), tell the peers
+     * that were sharing the grid so a lingering "conflict" can clear immediately on the
+     * remaining ones instead of waiting for the next AE2 node-state event.
+     */
+    private void notifyGridPeersOnLeave() {
+        try {
+            IGrid grid = getMainNode().getGrid();
+            if (grid == null) {
+                return;
+            }
+            List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
+            for (int i = 0; i < peers.size(); i++) {
+                DetectorBlockEntity peer = peers.get(i);
+                if (peer != this) {
+                    peer.refreshConflictAndBlockState();
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 }

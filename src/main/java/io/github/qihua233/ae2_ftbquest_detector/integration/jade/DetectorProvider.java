@@ -34,13 +34,16 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
 
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
+        CompoundTag data = accessor.getServerData();
+        if (data.getBoolean("NetworkConflict")) {
+            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.network_conflict"));
+            return;
+        }
         boolean isPowered = accessor.getBlockState().getValue(Objects.requireNonNull(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED));
         if (!isPowered) {
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.uncharged"));
             return;
         }
-
-        CompoundTag data = accessor.getServerData();
         if (Config.jadeShowOwnerInfo) {
             if (data.contains("TeamName")) {
                 String teamName = data.getString("TeamName");
@@ -63,6 +66,10 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
             return;
         }
         if (accessor.getBlockEntity() instanceof DetectorBlockEntity detector) {
+            if (detector.isNetworkConflict()) {
+                data.putBoolean("NetworkConflict", true);
+                return;
+            }
             if (detector.ownerTeamId != null) {
                 if (Config.jadeShowOwnerInfo) {
                     String teamName = TeamDisplayNameResolver.resolveExistingTeamName(detector.ownerTeamId, detector.ownerTeamNameCache);

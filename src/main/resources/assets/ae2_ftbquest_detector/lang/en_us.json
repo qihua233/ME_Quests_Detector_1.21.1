@@ -5,6 +5,7 @@
   "ae2-ftbquests-detector.detector.no_owner": "No Owner Device",
   "ae2-ftbquests-detector.detector.owner_is": "Owner Team is %s",
   "ae2-ftbquests-detector.detector.invalid_owner": "Owner Team Does not Exist",
+  "ae2-ftbquests-detector.detector.network_conflict": "§cError: only one ME Quests Detector is allowed per ME network§r",
   "ae2_ftbquest_detector.configuration.enableDetector": "Enable Detector",
   "ae2_ftbquest_detector.configuration.detectorTickRate": "Detector Scan Rate (Ticks)",
   "ae2_ftbquest_detector.configuration.title": "AE2 Quests Detector Config",

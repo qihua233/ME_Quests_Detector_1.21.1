@@ -6,6 +6,7 @@
   "ae2-ftbquests-detector.detector.owner_is": "所属队伍： %s",
   "ae2-ftbquests-detector.detector.team_name_too_short": "队伍名称长度小于3，重载后可能无法显示，建议修改队伍名称",
   "ae2-ftbquests-detector.detector.invalid_owner": "所属队伍不存在",
+  "ae2-ftbquests-detector.detector.network_conflict": "§c错误：同一ME网络中只允许存在一个ME任务检测器§r",
   "ae2_ftbquest_detector.configuration.enableDetector": "启用探测器",
   "ae2_ftbquest_detector.configuration.detectorTickRate": "探测器扫描频率 (Ticks)",
   "ae2_ftbquest_detector.configuration.title": "AE2任务检测器配置",
