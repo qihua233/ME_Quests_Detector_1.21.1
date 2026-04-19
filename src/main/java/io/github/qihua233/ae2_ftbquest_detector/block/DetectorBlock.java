@@ -95,6 +95,8 @@ public class DetectorBlock extends Block implements EntityBlock {
             return ItemInteractionResult.SUCCESS;
         }
         if (!state.getValue(POWERED)) {
+            Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
+            ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
             return ItemInteractionResult.SUCCESS;
         }
 

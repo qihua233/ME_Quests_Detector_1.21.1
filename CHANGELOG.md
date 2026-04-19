@@ -1,5 +1,13 @@
 # 更新日志
 
+## 0.4.2
+
+### 修复
+- **右键离线检测器无任何提示**:此前 `DetectorBlock.useItemOn` 在 `POWERED=false` 时直接返回 SUCCESS,不发送动作栏文案。现在补齐使用已有的 `ae2-ftbquests-detector.detector.uncharged`("设备离线" / "Device Offline")提示,与无主队伍、队伍不存在、网络冲突等其它失败状态保持一致(没装 Jade 的玩家也能感知)。
+
+### 说明
+- 复查确认:Jade 显示"设备离线"或"网络冲突"时,检测器的所有任务推进入口(`detectTask` / `performFullDetectionInternal` / `tick`)均已早退,核心工作链确实是切断的。
+
 ## 0.4.1
 
 ### 新增
