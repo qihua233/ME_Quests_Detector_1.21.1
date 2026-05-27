@@ -12,10 +12,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
-/**
- * Tracks active {@link DetectorBlockEntity} instances and indexes them by {@code ownerTeamId}
- * for O(team) lookups instead of scanning every detector on the server.
- */
+/** 跟踪已加载检测器，并按队伍建立索引。 */
 public class DetectorEntityList {
     private static final Set<DetectorBlockEntity> TRACKED_ENTITIES = Collections.newSetFromMap(new WeakHashMap<>());
     private static final Map<UUID, Set<DetectorBlockEntity>> BY_TEAM = new HashMap<>();
@@ -34,10 +31,7 @@ public class DetectorEntityList {
         }
     }
 
-    /**
-     * Call after {@code ownerTeamId} changes while the block entity may already be registered
-     * (e.g. placement, {@link DetectorBlockEntity#setOwnerTeam}).
-     */
+    /** ownerTeamId 改变后同步更新队伍索引。 */
     public static void notifyOwnerTeamIdChanged(DetectorBlockEntity be, UUID previousTeamId) {
         synchronized (TRACKED_ENTITIES) {
             if (!TRACKED_ENTITIES.contains(be)) {
@@ -69,10 +63,7 @@ public class DetectorEntityList {
         }
     }
 
-    /**
-     * Snapshot of detectors owned by {@code teamId}; safe to iterate outside the lock.
-     * Returns a caller-owned mutable list with a single allocation (no defensive copy).
-     */
+    /** 返回指定队伍下检测器的可遍历快照。 */
     public static List<DetectorBlockEntity> copyForTeam(UUID teamId) {
         if (teamId == null) {
             return List.of();
@@ -86,13 +77,18 @@ public class DetectorEntityList {
         }
     }
 
-    /**
-     * Snapshot of all detectors currently attached to {@code grid} (including the caller).
-     * Used to detect multi-detector conflicts on a single AE2 network, similar to how the
-     * AE2 ME Controller refuses to boot when multiple controllers share a network.
-     *
-     * <p>O(N) in the number of tracked detectors; N is small in practice (usually 0–2).
-     */
+    public static void markActiveCacheDirtyForTeam(UUID teamId) {
+        List<DetectorBlockEntity> list = copyForTeam(teamId);
+        int size = list.size();
+        for (int i = 0; i < size; i++) {
+            DetectorBlockEntity be = list.get(i);
+            if (be != null && !be.isRemoved()) {
+                be.markActiveCacheDirty();
+            }
+        }
+    }
+
+    /** 返回同一 AE2 网络中的检测器快照。 */
     public static List<DetectorBlockEntity> findInGrid(IGrid grid) {
         if (grid == null) {
             return List.of();

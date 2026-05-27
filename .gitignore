@@ -1,5 +1,9 @@
 .idea
 .gradle
+.gradle-user-home/
+.eclipse/
+bin/
+_tmp_ftbchunks/
 build/
 gradle/
 run/
