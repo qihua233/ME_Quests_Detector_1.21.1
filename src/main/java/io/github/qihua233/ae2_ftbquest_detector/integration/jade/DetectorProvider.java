@@ -5,6 +5,7 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
+import io.github.qihua233.ae2_ftbquest_detector.utility.BoundedExpiringCache;
 import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import net.minecraft.nbt.CompoundTag;
@@ -19,17 +20,18 @@ import snownee.jade.api.config.IPluginConfig;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class DetectorProvider implements IBlockComponentProvider, IServerDataProvider<BlockAccessor> {
     public static final DetectorProvider INSTANCE = new DetectorProvider();
     public static final ResourceLocation UID = ResourceLocation.fromNamespaceAndPath("ae2_ftbquest_detector", "detector");
 
     private static final long JADE_TASK_STATS_TTL_MS = 1000L;
+    private static final int JADE_TASK_STATS_MAX_ENTRIES = 512;
     private static ServerQuestFile jadeTaskStatsFileRef;
-    private static final ConcurrentHashMap<UUID, JadeTaskStats> JADE_TASK_STATS = new ConcurrentHashMap<>();
+    private static final BoundedExpiringCache<UUID, JadeTaskStats> JADE_TASK_STATS =
+            new BoundedExpiringCache<>(JADE_TASK_STATS_MAX_ENTRIES);
 
-    private record JadeTaskStats(long expireAtMs, int completed, int total) {
+    private record JadeTaskStats(int completed, int total) {
     }
 
     @Override
@@ -90,14 +92,14 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
         }
     }
 
-    private static JadeTaskStats computeOrGetCachedTaskStats(ServerQuestFile file, TeamData teamData, UUID teamId) {
+    private static synchronized JadeTaskStats computeOrGetCachedTaskStats(ServerQuestFile file, TeamData teamData, UUID teamId) {
         long now = System.currentTimeMillis();
         if (jadeTaskStatsFileRef != file) {
             JADE_TASK_STATS.clear();
             jadeTaskStatsFileRef = file;
         }
-        JadeTaskStats cached = JADE_TASK_STATS.get(teamId);
-        if (cached != null && now < cached.expireAtMs) {
+        JadeTaskStats cached = JADE_TASK_STATS.get(teamId, now);
+        if (cached != null) {
             return cached;
         }
         List<Task> tasks = file.getAllTasks();
@@ -108,8 +110,8 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
                 completed++;
             }
         }
-        JadeTaskStats stats = new JadeTaskStats(now + JADE_TASK_STATS_TTL_MS, completed, total);
-        JADE_TASK_STATS.put(teamId, stats);
+        JadeTaskStats stats = new JadeTaskStats(completed, total);
+        JADE_TASK_STATS.put(teamId, stats, now + JADE_TASK_STATS_TTL_MS, now);
         return stats;
     }
 

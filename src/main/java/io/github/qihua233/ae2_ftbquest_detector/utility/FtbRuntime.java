@@ -14,7 +14,7 @@ public final class FtbRuntime {
             Class.forName("dev.ftb.mods.ftbquests.quest.ServerQuestFile");
             Class.forName("dev.ftb.mods.ftbteams.data.TeamManagerImpl");
             return true;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError ignored) {
             return false;
         }
     }

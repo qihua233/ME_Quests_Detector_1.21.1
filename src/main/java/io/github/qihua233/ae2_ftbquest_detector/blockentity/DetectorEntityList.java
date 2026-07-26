@@ -1,26 +1,32 @@
 package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
 import appeng.api.networking.IGrid;
+import com.mojang.logging.LogUtils;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** 跟踪已加载检测器，并按队伍建立索引。 */
-public class DetectorEntityList {
-    private static final Set<DetectorBlockEntity> TRACKED_ENTITIES = Collections.newSetFromMap(new WeakHashMap<>());
-    private static final Map<UUID, Set<DetectorBlockEntity>> BY_TEAM = new HashMap<>();
+public final class DetectorEntityList {
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Set<DetectorBlockEntity> TRACKED_ENTITIES = newWeakSet();
+    private static final Map<UUID, Set<DetectorBlockEntity>> BY_TEAM = new ConcurrentHashMap<>();
+
+    private DetectorEntityList() {
+    }
 
     public static void register(DetectorBlockEntity be) {
         synchronized (TRACKED_ENTITIES) {
             TRACKED_ENTITIES.add(be);
             addToTeamIndex(be);
+            pruneEmptyTeamIndexes();
         }
     }
 
@@ -28,6 +34,7 @@ public class DetectorEntityList {
         synchronized (TRACKED_ENTITIES) {
             removeFromTeamIndex(be, be.ownerTeamId);
             TRACKED_ENTITIES.remove(be);
+            pruneEmptyTeamIndexes();
         }
     }
 
@@ -47,7 +54,7 @@ public class DetectorEntityList {
         if (id == null) {
             return;
         }
-        BY_TEAM.computeIfAbsent(id, k -> new HashSet<>()).add(be);
+        BY_TEAM.computeIfAbsent(id, ignored -> newWeakSet()).add(be);
     }
 
     private static void removeFromTeamIndex(DetectorBlockEntity be, UUID teamId) {
@@ -83,7 +90,11 @@ public class DetectorEntityList {
         for (int i = 0; i < size; i++) {
             DetectorBlockEntity be = list.get(i);
             if (be != null && !be.isRemoved()) {
-                be.markActiveCacheDirty();
+                try {
+                    be.markActiveCacheDirty();
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Failed to invalidate detector task cache at {}", be.getBlockPos(), exception);
+                }
             }
         }
     }
@@ -102,7 +113,8 @@ public class DetectorEntityList {
                 IGrid g;
                 try {
                     g = be.getMainNode().getGrid();
-                } catch (Throwable t) {
+                } catch (RuntimeException exception) {
+                    LOGGER.debug("Skipping detector with unavailable grid node at {}", be.getBlockPos(), exception);
                     continue;
                 }
                 if (g == grid) {
@@ -114,5 +126,13 @@ public class DetectorEntityList {
             }
             return result == null ? List.of() : result;
         }
+    }
+
+    private static Set<DetectorBlockEntity> newWeakSet() {
+        return Collections.newSetFromMap(new WeakHashMap<>());
+    }
+
+    private static void pruneEmptyTeamIndexes() {
+        BY_TEAM.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 }

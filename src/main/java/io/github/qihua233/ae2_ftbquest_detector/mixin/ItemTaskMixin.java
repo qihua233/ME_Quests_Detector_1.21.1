@@ -13,14 +13,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(ItemTask.class)
 public class ItemTaskMixin {
 
-//    }
     @Inject(
             method = "submitTask(Ldev/ftb/mods/ftbquests/quest/TeamData;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/world/item/ItemStack;)V",
-//            at = @At(
-//                    value = "INVOKE",
-//                    target = "Lnet/minecraft/server/level/ServerPlayer;getInventory()Lnet/minecraft/world/entity/player/Inventory;",
-//                    shift = At.Shift.AFTER
-//            ),
             at = @At("HEAD"),
             remap = false
     )

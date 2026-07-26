@@ -88,6 +88,9 @@ repositories {
 }
 
 dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+
     // AE2
     implementation "curse.maven:applied-energistics-2-223794:7027323"
 
@@ -104,6 +107,10 @@ dependencies {
     implementation "curse.maven:jade-324717:7545219"
      compileOnly "curse.maven:jei-238222:7391682"
      runtimeOnly "curse.maven:jei-238222:7391682"
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
 }
 
 tasks.withType(ProcessResources).configureEach {

@@ -5,6 +5,7 @@ import dev.ftb.mods.ftblibrary.config.Tristate;
 import dev.ftb.mods.ftbquests.quest.Quest;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import io.github.qihua233.ae2_ftbquest_detector.utility.IFluidTaskExtension;
+import io.github.qihua233.ae2_ftbquest_detector.utility.SafeEnumValue;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -28,7 +29,6 @@ public class FluidTaskMixin implements IFluidTaskExtension {
 
     }
 
-    //@Inject(method = "consumesResources", at = @At("HEAD"), remap = false, cancellable = true)
     /**
      * @author mod_author
      * @reason fix
@@ -36,52 +36,48 @@ public class FluidTaskMixin implements IFluidTaskExtension {
     @Overwrite(remap = false)
     public boolean consumesResources() {
         FluidTask self = (FluidTask)(Object)this;
-        return this.consumeFluid.get(self.getQuest().getChapter().consumeItems());
+        return currentConsumeFluid().get(self.getQuest().getChapter().consumeItems());
     }
 
 
     @Inject(method = "fillConfigGroup", at = @At("TAIL"), remap = false)
     public void fillConfig(ConfigGroup config, CallbackInfo ci) {
-        //this.isModified = true;
-        config.addEnum("consume_fluid", this.getConsumeFluid(), (v) ->
-        {
-            //System.out.println("set " + this.consumeFluid.displayName +" to " + v.displayName);
-            this.consumeFluid = v;
-            //System.out.println(System.identityHashCode(this));
-            //this.setConsumeFluid(v);
-        }, Tristate.NAME_MAP);
+        config.addEnum("consume_fluid", currentConsumeFluid(), this::setConsumeFluid, Tristate.NAME_MAP);
     }
 
     @Override
     public Tristate getConsumeFluid() {
-        return consumeFluid;
+        return currentConsumeFluid();
     }
 
     public void setConsumeFluid(Tristate value) {
-        consumeFluid = value;
+        consumeFluid = value == null ? Tristate.DEFAULT : value;
     }
 
     @Inject(method = "writeData", at = @At("TAIL"), remap = false)
     private void writeNBT(CompoundTag tag, HolderLookup.Provider provider, CallbackInfo ci) {
-        String consumeFluidName = consumeFluid.name();
-        tag.putString("consume_fluid", consumeFluidName);
+        tag.putString("consume_fluid", currentConsumeFluid().name());
     }
 
     @Inject(method = "readData", at = @At("TAIL"), remap = false)
     private void readNBT(CompoundTag tag, HolderLookup.Provider provider, CallbackInfo ci) {
         if (tag.contains("consume_fluid")) {
-            consumeFluid = Tristate.valueOf(tag.getString("consume_fluid"));
+            consumeFluid = SafeEnumValue.parse(Tristate.class, tag.getString("consume_fluid"), Tristate.DEFAULT);
         }
     }
 
     @Inject(method = "writeNetData", at = @At("TAIL"), remap = false)
     private void writeNet(RegistryFriendlyByteBuf buffer, CallbackInfo ci) {
-        Enum<?> value = consumeFluid;
-        buffer.writeEnum(value);
+        buffer.writeEnum(currentConsumeFluid());
     }
 
     @Inject(method = "readNetData", at = @At("TAIL"), remap = false)
     private void readNet(RegistryFriendlyByteBuf buf, CallbackInfo ci) {
         consumeFluid = buf.readEnum(Tristate.class);
+    }
+
+    @Unique
+    private Tristate currentConsumeFluid() {
+        return consumeFluid == null ? Tristate.DEFAULT : consumeFluid;
     }
 }

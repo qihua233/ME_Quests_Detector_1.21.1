@@ -4,6 +4,7 @@ package io.github.qihua233.ae2_ftbquest_detector.block;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorEntityList;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
+import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -28,6 +29,7 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.ItemInteractionResult;
 import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 import java.util.UUID;
@@ -35,6 +37,7 @@ import java.util.UUID;
 
 @SuppressWarnings("null")
 public class DetectorBlock extends Block implements EntityBlock {
+    private static final Logger LOGGER = LogUtils.getLogger();
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
 
@@ -122,8 +125,6 @@ public class DetectorBlock extends Block implements EntityBlock {
                             serverPlayer.displayClientMessage(Component.translatable("ae2-ftbquests-detector.detector.team_name_too_short"), false);
                             detector.shortNameWarnedPlayers.add(serverPlayer.getUUID());
                         }
-
-                        detector.performFullDetection();
                     } else {
                         Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                         ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
@@ -131,8 +132,8 @@ public class DetectorBlock extends Block implements EntityBlock {
                         ));
                     }
                 }
-                catch (Throwable e)
-                {
+                catch (RuntimeException exception) {
+                    LOGGER.error("Failed to resolve detector owner at {}", pos, exception);
                     Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                     ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
                             message)

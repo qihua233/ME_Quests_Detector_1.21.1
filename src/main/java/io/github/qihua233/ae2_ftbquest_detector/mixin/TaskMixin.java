@@ -27,7 +27,6 @@ public class TaskMixin {
                 && self.consumesResources()
         )
         {
-            //System.out.println("submitFluid mixin" + self.submitItemsOnInventoryChange() );
             SubmitHelper.submitTask(teamData, player, self);
         }
     }
@@ -38,11 +37,9 @@ public class TaskMixin {
             remap = false,
             cancellable = true)
     private void check(CallbackInfoReturnable<Boolean> cir) {
-        //System.out.println("check ifsubmit");
         Task thisTask = (Task) (Object) this;
         if(thisTask instanceof FluidTask self)
         {
-            //System.out.println("check ifsubmitfluid:" + self.consumesResources());
             cir.setReturnValue(!self.consumesResources());
         }
 
