@@ -12,6 +12,7 @@ import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
+import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.utility.CoalescingLongQueue;
 import io.github.qihua233.ae2_ftbquest_detector.utility.DetectorProgressSyncContext;
@@ -143,12 +144,15 @@ final class DetectorDetectionService {
     }
 
     synchronized void onUnloaded(DetectorBlockEntity detector, long gameTime) {
+        boolean retained = false;
         try {
             flushProgress(detector, gameTime, true);
         } catch (RuntimeException exception) {
             LOGGER.error("Failed to flush detector progress before unloading {}", detector.getBlockPos(), exception);
         } finally {
-            retainProgressAfterUnload(detector);
+            retained = retainProgressAfterUnload(detector);
+        }
+        if (retained) {
             progressUpdates.clear();
         }
         stackWatcher = null;
@@ -432,19 +436,42 @@ final class DetectorDetectionService {
         }
     }
 
-    private void retainProgressAfterUnload(DetectorBlockEntity detector) {
+    private boolean retainProgressAfterUnload(DetectorBlockEntity detector) {
         if (progressUpdates.isEmpty()) {
-            return;
+            return true;
         }
         MinecraftServer server = getServer(detector);
         UUID teamId = detector.ownerTeamId;
         if (server == null || teamId == null) {
-            LOGGER.warn("Discarding pending detector progress at {} because its server context is unavailable",
+            LOGGER.error("Keeping pending detector progress at {} because its server context is unavailable; "
+                            + "it will be retried if the block entity is loaded again",
                     detector.getBlockPos());
-            return;
+            return false;
         }
-        progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) ->
-                DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress));
+
+        try {
+            progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) -> {
+                RuntimeException lastFailure = null;
+                for (int attempt = 1; attempt <= 3; attempt++) {
+                    try {
+                        DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress);
+                        return;
+                    } catch (RuntimeException exception) {
+                        lastFailure = exception;
+                        LOGGER.warn("Failed to retain detector progress for team {} (attempt {}/3)",
+                                teamId, attempt, exception);
+                    }
+                }
+                throw lastFailure == null
+                        ? new IllegalStateException("No recovery storage failure was captured")
+                        : lastFailure;
+            });
+            return progressUpdates.isEmpty();
+        } catch (RuntimeException exception) {
+            LOGGER.error("Keeping pending detector progress at {} after recovery storage failure",
+                    detector.getBlockPos(), exception);
+            return false;
+        }
     }
 
     private void discardRecoveredProgress(DetectorBlockEntity detector) {
@@ -455,7 +482,16 @@ final class DetectorDetectionService {
     }
 
     private static MinecraftServer getServer(DetectorBlockEntity detector) {
-        return detector.getLevel() instanceof ServerLevel serverLevel ? serverLevel.getServer() : null;
+        if (detector.getLevel() instanceof ServerLevel serverLevel) {
+            return serverLevel.getServer();
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            return manager == null ? null : manager.getServer();
+        } catch (RuntimeException exception) {
+            LOGGER.debug("Failed to resolve the server from FTB Teams", exception);
+            return null;
+        }
     }
 
     private static AEKey taskKey(Task task) {
