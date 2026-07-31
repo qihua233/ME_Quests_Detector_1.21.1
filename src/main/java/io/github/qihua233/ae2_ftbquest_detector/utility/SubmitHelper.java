@@ -24,6 +24,9 @@ public final class SubmitHelper {
         if (!teamData.getFile().isServerSide()) {
             return;
         }
+        if (!TeamOwnershipValidator.isUsableTeam(teamData.getTeamId())) {
+            return;
+        }
 
         for (var e : DetectorEntityList.copyForTeam(teamData.getTeamId())) {
             try {
@@ -71,7 +74,7 @@ public final class SubmitHelper {
                 }
             } catch (RuntimeException exception) {
                 LOGGER.error("Failed to submit task {} through detector at {}; another detector may retry it",
-                        task.getId(), e == null ? "unknown" : e.getBlockPos(), exception);
+                        task.getId(), e.getBlockPos(), exception);
             }
         }
     }

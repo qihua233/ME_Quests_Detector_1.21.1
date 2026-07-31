@@ -1,0 +1,94 @@
+package io.github.qihua233.ae2_ftbquest_detector.blockentity;
+
+import com.mojang.logging.LogUtils;
+import dev.ftb.mods.ftbteams.api.Team;
+import dev.ftb.mods.ftbteams.api.event.PlayerChangedTeamEvent;
+import dev.ftb.mods.ftbteams.api.event.PlayerJoinedPartyTeamEvent;
+import dev.ftb.mods.ftbteams.api.event.PlayerLeftPartyTeamEvent;
+import dev.ftb.mods.ftbteams.api.event.PlayerLoggedInAfterTeamEvent;
+import dev.ftb.mods.ftbteams.api.event.TeamEvent;
+import dev.ftb.mods.ftbteams.api.event.TeamManagerEvent;
+
+import java.util.UUID;
+import org.slf4j.Logger;
+
+/** 队伍成员关系变化后立即刷新绑定该队伍的检测器。 */
+public final class DetectorTeamSyncHandler {
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    private DetectorTeamSyncHandler() {
+    }
+
+    public static void register() {
+        TeamEvent.PLAYER_CHANGED.register(DetectorTeamSyncHandler::onPlayerChanged);
+        TeamEvent.PLAYER_JOINED_PARTY.register(DetectorTeamSyncHandler::onPlayerJoinedParty);
+        TeamEvent.PLAYER_LEFT_PARTY.register(DetectorTeamSyncHandler::onPlayerLeftParty);
+        TeamEvent.PLAYER_LOGGED_IN.register(DetectorTeamSyncHandler::onPlayerLoggedIn);
+        TeamEvent.DELETED.register(DetectorTeamSyncHandler::onTeamEvent);
+        TeamManagerEvent.LOADED.register(event -> DetectorEntityList.refreshAllTeamStatuses());
+    }
+
+    private static void onPlayerChanged(PlayerChangedTeamEvent event) {
+        try {
+            Team currentTeam = event.getTeam();
+            Team previousTeam = event.getPreviousTeam().orElse(null);
+            if (shouldFollowPlayer(previousTeam, event.getPlayerId())) {
+                DetectorEntityList.reassignTeamDetectors(previousTeam.getId(), currentTeam.getId());
+            }
+            refresh(previousTeam);
+            refresh(currentTeam);
+        } catch (RuntimeException exception) {
+            LOGGER.error("Failed to process FTB Teams membership change for player {}", event.getPlayerId(), exception);
+        }
+    }
+
+    private static void onPlayerJoinedParty(PlayerJoinedPartyTeamEvent event) {
+        refresh(event.getPreviousTeam());
+        refresh(event.getTeam());
+    }
+
+    private static void onPlayerLeftParty(PlayerLeftPartyTeamEvent event) {
+        try {
+            Team previousTeam = event.getTeam();
+            if (event.getTeamDeleted() && shouldFollowPlayer(previousTeam, event.getPlayerId())) {
+                Team playerTeam = event.getPlayerTeam();
+                DetectorEntityList.reassignTeamDetectors(previousTeam.getId(), playerTeam.getId());
+            }
+            refresh(event.getPlayerTeam());
+            refresh(event.getTeam());
+        } catch (RuntimeException exception) {
+            LOGGER.error("Failed to process FTB Teams party leave for player {}", event.getPlayerId(), exception);
+        }
+    }
+
+    private static void onPlayerLoggedIn(PlayerLoggedInAfterTeamEvent event) {
+        refresh(event.getTeam());
+    }
+
+    private static void onTeamEvent(TeamEvent event) {
+        refresh(event.getTeam());
+    }
+
+    private static void refresh(Team team) {
+        if (team != null) {
+            refresh(team.getId());
+        }
+    }
+
+    private static void refresh(UUID teamId) {
+        DetectorEntityList.refreshTeamStatus(teamId);
+    }
+
+    static boolean shouldFollowPlayer(Team previousTeam, UUID playerId) {
+        if (previousTeam == null || playerId == null) {
+            return false;
+        }
+        return TeamTransitionPolicy.shouldFollowPlayer(
+                previousTeam.getId(),
+                previousTeam.isPlayerTeam(),
+                previousTeam.isPartyTeam(),
+                playerId.equals(previousTeam.getOwner()),
+                playerId
+        );
+    }
+}

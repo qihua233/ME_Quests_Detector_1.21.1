@@ -18,23 +18,36 @@ public final class DetectorEntityList {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Set<DetectorBlockEntity> TRACKED_ENTITIES = newWeakSet();
     private static final Map<UUID, Set<DetectorBlockEntity>> BY_TEAM = new ConcurrentHashMap<>();
+    private static final GridMembershipIndex<DetectorBlockEntity, IGrid> GRID_INDEX = new GridMembershipIndex<>();
 
     private DetectorEntityList() {
     }
 
-    public static void register(DetectorBlockEntity be) {
+    public static void register(DetectorBlockEntity be, IGrid grid) {
         synchronized (TRACKED_ENTITIES) {
             TRACKED_ENTITIES.add(be);
             addToTeamIndex(be);
+            GRID_INDEX.update(be, grid);
             pruneEmptyTeamIndexes();
         }
     }
 
-    public static void unregister(DetectorBlockEntity be) {
+    public static IGrid unregister(DetectorBlockEntity be) {
         synchronized (TRACKED_ENTITIES) {
             removeFromTeamIndex(be, be.ownerTeamId);
             TRACKED_ENTITIES.remove(be);
+            IGrid previousGrid = GRID_INDEX.remove(be);
             pruneEmptyTeamIndexes();
+            return previousGrid;
+        }
+    }
+
+    public static IGrid updateGrid(DetectorBlockEntity be, IGrid grid) {
+        synchronized (TRACKED_ENTITIES) {
+            if (TRACKED_ENTITIES.contains(be)) {
+                return GRID_INDEX.update(be, grid);
+            }
+            return null;
         }
     }
 
@@ -86,9 +99,7 @@ public final class DetectorEntityList {
 
     public static void markActiveCacheDirtyForTeam(UUID teamId) {
         List<DetectorBlockEntity> list = copyForTeam(teamId);
-        int size = list.size();
-        for (int i = 0; i < size; i++) {
-            DetectorBlockEntity be = list.get(i);
+        for (DetectorBlockEntity be : list) {
             if (be != null && !be.isRemoved()) {
                 try {
                     be.markActiveCacheDirty();
@@ -100,31 +111,58 @@ public final class DetectorEntityList {
     }
 
     /** 返回同一 AE2 网络中的检测器快照。 */
-    public static List<DetectorBlockEntity> findInGrid(IGrid grid) {
-        if (grid == null) {
-            return List.of();
-        }
+    public static List<DetectorBlockEntity> copyForGrid(IGrid grid) {
         synchronized (TRACKED_ENTITIES) {
-            List<DetectorBlockEntity> result = null;
-            for (DetectorBlockEntity be : TRACKED_ENTITIES) {
-                if (be == null || be.isRemoved()) {
-                    continue;
-                }
-                IGrid g;
+            return GRID_INDEX.copyForGrid(grid);
+        }
+    }
+
+    /** 队伍成员关系变化后刷新检测器的有效状态和缓存。 */
+    public static void refreshTeamStatus(UUID teamId) {
+        List<DetectorBlockEntity> list = copyForTeam(teamId);
+        for (DetectorBlockEntity be : list) {
+            if (be != null && !be.isRemoved()) {
                 try {
-                    g = be.getMainNode().getGrid();
+                    be.onOwnerTeamStatusChanged();
                 } catch (RuntimeException exception) {
-                    LOGGER.debug("Skipping detector with unavailable grid node at {}", be.getBlockPos(), exception);
-                    continue;
-                }
-                if (g == grid) {
-                    if (result == null) {
-                        result = new ArrayList<>(2);
-                    }
-                    result.add(be);
+                    LOGGER.error("Failed to refresh detector team status at {}", be.getBlockPos(), exception);
                 }
             }
-            return result == null ? List.of() : result;
+        }
+    }
+
+    /** 将旧队伍的已加载检测器整体迁移到其队长当前的有效队伍。 */
+    public static void reassignTeamDetectors(UUID previousTeamId, UUID newTeamId) {
+        if (previousTeamId == null || newTeamId == null || previousTeamId.equals(newTeamId)) {
+            return;
+        }
+        List<DetectorBlockEntity> list = copyForTeam(previousTeamId);
+        for (DetectorBlockEntity be : list) {
+            if (be != null && !be.isRemoved()) {
+                try {
+                    be.reassignOwnerTeam(newTeamId);
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Failed to reassign detector team at {} from {} to {}",
+                            be.getBlockPos(), previousTeamId, newTeamId, exception);
+                }
+            }
+        }
+    }
+
+    /** 队伍管理器重新加载后，重新校验所有已加载检测器。 */
+    public static void refreshAllTeamStatuses() {
+        List<DetectorBlockEntity> list;
+        synchronized (TRACKED_ENTITIES) {
+            list = new ArrayList<>(TRACKED_ENTITIES);
+        }
+        for (DetectorBlockEntity be : list) {
+            if (be != null && !be.isRemoved()) {
+                try {
+                    be.onOwnerTeamStatusChanged();
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Failed to refresh detector team status at {}", be.getBlockPos(), exception);
+                }
+            }
         }
     }
 

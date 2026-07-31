@@ -6,16 +6,19 @@ import appeng.api.stacks.AEFluidKey;
 import appeng.api.stacks.AEItemKey;
 import appeng.api.stacks.AEKey;
 import appeng.api.stacks.KeyCounter;
+import com.mojang.logging.LogUtils;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
-import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.utility.CoalescingLongQueue;
 import io.github.qihua233.ae2_ftbquest_detector.utility.DetectorProgressSyncContext;
 import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,8 +26,10 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import org.slf4j.Logger;
 
 final class DetectorDetectionService {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final int PARTIAL_PROGRESS_FLUSH_INTERVAL = Config.detectorTickRate * 3;
     private static final int MAX_PROGRESS_UPDATES_PER_TICK = 64;
 
@@ -82,21 +87,36 @@ final class DetectorDetectionService {
         requestFullScan();
     }
 
+    private void invalidateCachesPreservingProgress() {
+        cacheDirty = true;
+        activeCacheDirty = true;
+        pendingKeyAmounts.clear();
+        requestFullScan();
+    }
+
     synchronized void requestFullScan() {
         fullScanPending = true;
         stateDirty = true;
     }
 
-    synchronized void onLoaded() {
-        markCacheDirty();
+    synchronized void onLoaded(DetectorBlockEntity detector) {
+        restoreProgressAfterReload(detector);
+        resetForReload(!progressUpdates.isEmpty());
     }
 
-    synchronized void onUnloaded() {
+    synchronized void onUnloaded(DetectorBlockEntity detector, long gameTime) {
+        try {
+            flushProgress(detector, gameTime, true);
+        } catch (RuntimeException exception) {
+            LOGGER.error("Failed to flush detector progress before unloading {}", detector.getBlockPos(), exception);
+        } finally {
+            retainProgressAfterUnload(detector);
+            progressUpdates.clear();
+        }
         stackWatcher = null;
         cachedTasksByKey.clear();
         activeTasksByKey.clear();
         pendingKeyAmounts.clear();
-        progressUpdates.clear();
         cacheDirty = true;
         activeCacheDirty = true;
         stateDirty = true;
@@ -107,9 +127,15 @@ final class DetectorDetectionService {
     }
 
     private void scanIfNeeded(DetectorBlockEntity detector, long gameTime) {
+        restoreProgressAfterReload(detector);
+        if (isOwnerTeamDefinitelyUnavailable(detector)) {
+            progressUpdates.clear();
+            immediateProgressFlushPending = false;
+            discardRecoveredProgress(detector);
+        }
         if (reconnectPending) {
             reconnectPending = false;
-            markCacheDirty();
+            invalidateCachesPreservingProgress();
         }
         if (detector.isNetworkConflict()) {
             stateDirty = hasPendingScanWork();
@@ -143,12 +169,18 @@ final class DetectorDetectionService {
     }
 
     private void flushProgressIfReady(DetectorBlockEntity detector, long gameTime) {
-        if (progressUpdates.isEmpty() || !isFlushReady(gameTime)) {
+        flushProgress(detector, gameTime, false);
+    }
+
+    private void flushProgress(DetectorBlockEntity detector, long gameTime, boolean force) {
+        if (progressUpdates.isEmpty() || !force && !isFlushReady(gameTime)) {
             return;
         }
         DetectionContext context = resolveContext(detector, false);
         if (context == null) {
-            stateDirty = true;
+            if (!force) {
+                stateDirty = true;
+            }
             return;
         }
 
@@ -177,12 +209,13 @@ final class DetectorDetectionService {
     }
 
     private DetectionContext resolveContext(DetectorBlockEntity detector, boolean requireInventory) {
-        if (!detector.getMainNode().isReady() || !detector.getMainNode().isActive() || detector.isNetworkConflict()) {
+        if (requireInventory && (!detector.getMainNode().isReady()
+                || !detector.getMainNode().isActive() || detector.isNetworkConflict())) {
             return null;
         }
         ServerQuestFile file = ServerQuestFile.INSTANCE;
         UUID ownerTeamId = detector.ownerTeamId;
-        if (file == null || ownerTeamId == null || TeamManagerImpl.INSTANCE.getTeamMap().get(ownerTeamId) == null) {
+        if (file == null || !TeamOwnershipValidator.isUsableTeam(ownerTeamId)) {
             return null;
         }
         TeamData teamData = file.getNullableTeamData(ownerTeamId);
@@ -299,6 +332,94 @@ final class DetectorDetectionService {
         progressUpdates.clear();
         immediateProgressFlushPending = false;
         nextPartialProgressFlushGameTime = Long.MIN_VALUE;
+    }
+
+    private void resetForReload(boolean preserveProgress) {
+        cacheDirty = true;
+        activeCacheDirty = true;
+        pendingKeyAmounts.clear();
+        if (preserveProgress) {
+            immediateProgressFlushPending = !progressUpdates.isEmpty();
+            nextPartialProgressFlushGameTime = Long.MIN_VALUE;
+        } else {
+            clearDerivedState();
+        }
+        stateDirty = true;
+        fullScanPending = true;
+    }
+
+    private boolean isOwnerTeamDefinitelyUnavailable(DetectorBlockEntity detector) {
+        TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(detector.ownerTeamId);
+        return status == TeamOwnershipValidator.Status.NONE
+                || status == TeamOwnershipValidator.Status.EMPTY
+                || status == TeamOwnershipValidator.Status.INVALID;
+    }
+
+    private void restoreProgressAfterReload(DetectorBlockEntity detector) {
+        MinecraftServer server = getServer(detector);
+        UUID teamId = detector.ownerTeamId;
+        if (server == null || teamId == null) {
+            return;
+        }
+
+        TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(teamId);
+        if (status == TeamOwnershipValidator.Status.NONE
+                || status == TeamOwnershipValidator.Status.EMPTY
+                || status == TeamOwnershipValidator.Status.INVALID) {
+            DetectorProgressRecoveryStore.discard(server, teamId);
+            return;
+        }
+        if (status != TeamOwnershipValidator.Status.USABLE || ServerQuestFile.INSTANCE == null) {
+            return;
+        }
+
+        for (DetectorProgressRecoveryStore.PendingProgress pending
+                : DetectorProgressRecoveryStore.copyFor(server, teamId)) {
+            try {
+                Task task = ServerQuestFile.INSTANCE.getTask(pending.taskId());
+                if (task == null || task.consumesResources() || taskKey(task) == null) {
+                    DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
+                    continue;
+                }
+                long targetProgress = Math.min(task.getMaxProgress(), pending.targetProgress());
+                if (targetProgress <= 0L) {
+                    DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
+                    continue;
+                }
+                progressUpdates.offerMax(task, targetProgress);
+                immediateProgressFlushPending = true;
+                DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
+            } catch (RuntimeException exception) {
+                LOGGER.warn("Failed to restore detector progress for task {} and team {}",
+                        pending.taskId(), teamId, exception);
+            }
+        }
+    }
+
+    private void retainProgressAfterUnload(DetectorBlockEntity detector) {
+        if (progressUpdates.isEmpty()) {
+            return;
+        }
+        MinecraftServer server = getServer(detector);
+        UUID teamId = detector.ownerTeamId;
+        if (server == null || teamId == null) {
+            LOGGER.warn("Discarding pending detector progress at {} because its server context is unavailable",
+                    detector.getBlockPos());
+            return;
+        }
+        progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) ->
+                DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress));
+    }
+
+    private void discardRecoveredProgress(DetectorBlockEntity detector) {
+        MinecraftServer server = getServer(detector);
+        if (server != null && detector.ownerTeamId != null) {
+            DetectorProgressRecoveryStore.discard(server, detector.ownerTeamId);
+        }
+    }
+
+    private static MinecraftServer getServer(DetectorBlockEntity detector) {
+        return detector.getLevel() instanceof ServerLevel serverLevel ? serverLevel.getServer() : null;
     }
 
     private static AEKey taskKey(Task task) {

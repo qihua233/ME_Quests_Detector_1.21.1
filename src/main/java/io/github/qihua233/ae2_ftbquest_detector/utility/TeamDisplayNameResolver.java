@@ -3,7 +3,6 @@ package io.github.qihua233.ae2_ftbquest_detector.utility;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.api.property.TeamProperties;
 import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
-import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.TeamNameDisplayMode;
 
 import java.util.Locale;
@@ -14,26 +13,25 @@ public final class TeamDisplayNameResolver {
     private TeamDisplayNameResolver() {
     }
 
-    public static String resolveExistingTeamName(UUID ownerTeamId) {
-        return resolveExistingTeamName(ownerTeamId, null);
-    }
-
-    public static String resolveExistingTeamName(UUID ownerTeamId, String cachedTeamName) {
-        return resolveExistingTeamName(ownerTeamId, cachedTeamName, Config.teamNameDisplayMode);
-    }
-
     public static String resolveExistingTeamName(UUID ownerTeamId, String cachedTeamName, TeamNameDisplayMode mode) {
         if (ownerTeamId == null) {
             return null;
         }
         TeamNameDisplayMode useMode = mode != null ? mode : TeamNameDisplayMode.NAME_AND_SHORT_ID;
         String teamName = resolveRawTeamName(ownerTeamId, cachedTeamName);
-        String shortId = toShortTeamId(ownerTeamId);
+        return formatDisplayName(teamName, ownerTeamId, useMode);
+    }
+
+    /** Formats data already resolved by the server without reading the client team cache. */
+    public static String formatDisplayName(String teamName, UUID teamId, TeamNameDisplayMode mode) {
+        TeamNameDisplayMode useMode = mode != null ? mode : TeamNameDisplayMode.NAME_AND_SHORT_ID;
+        String normalizedName = normalize(teamName);
+        String shortId = toShortTeamId(teamId);
 
         return switch (useMode) {
-            case NAME_ONLY -> firstNonBlank(teamName, shortId);
-            case SHORT_ID_ONLY -> firstNonBlank(shortId, teamName);
-            case NAME_AND_SHORT_ID -> formatNameAndShortId(teamName, shortId);
+            case NAME_ONLY -> firstNonBlank(normalizedName, shortId);
+            case SHORT_ID_ONLY -> firstNonBlank(shortId, normalizedName);
+            case NAME_AND_SHORT_ID -> formatNameAndShortId(normalizedName, shortId);
         };
     }
 
@@ -67,9 +65,9 @@ public final class TeamDisplayNameResolver {
             return normalize(cachedTeamName);
         }
 
-        Team team = manager.getTeamByID(ownerTeamId).orElse(null);
+        Team team = TeamOwnershipValidator.resolveUsableTeam(ownerTeamId);
         if (team == null) {
-            team = manager.getTeamMap().get(ownerTeamId);
+            return null;
         }
 
         String bestName = resolveBestName(manager, team, ownerTeamId);
@@ -86,23 +84,19 @@ public final class TeamDisplayNameResolver {
     }
 
     private static String resolveBestName(TeamManagerImpl manager, Team team, UUID ownerTeamId) {
+        if (team != null && team.isPlayerTeam()) {
+            String playerName = normalize(manager.getPlayerName(team.getId()).getString());
+            if (playerName != null) {
+                return playerName;
+            }
+        }
+
         String value = readName(team);
         if (value != null) {
             return value;
         }
 
-        value = findNameKeyByTeamId(manager, ownerTeamId);
-        if (value != null) {
-            return value;
-        }
-
-        if (team != null && team.isPlayerTeam()) {
-            value = normalize(manager.getPlayerName(team.getOwner()).getString());
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
+        return findNameKeyByTeamId(manager, ownerTeamId);
     }
 
     private static String readName(Team team) {

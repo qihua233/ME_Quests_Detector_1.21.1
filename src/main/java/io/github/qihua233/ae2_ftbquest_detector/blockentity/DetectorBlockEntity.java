@@ -15,6 +15,7 @@ import io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -43,6 +44,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     /** 同一 ME 网络存在多个检测器时停止工作。 */
     private boolean networkConflict = false;
+    private boolean lifecycleLoaded;
+    private int teamValidationRetryTicks;
     private int tickCount = 0;
 
     public DetectorBlockEntity(BlockPos pos, BlockState state) {
@@ -106,20 +109,16 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     public void setOwnerTeam(Player player) {
-        UUID previous = this.ownerTeamId;
         try {
-            TeamManagerImpl.INSTANCE.getTeamForPlayer((ServerPlayer) player).ifPresent(team -> {
-                ownerTeamId = team.getId();
-                ownerTeamNameCache = TeamDisplayNameResolver.resolveRawTeamName(ownerTeamId, null);
-                shortNameWarnedPlayers.clear();
-                markCacheDirty();
-            });
+            TeamManagerImpl.INSTANCE.getTeamForPlayer((ServerPlayer) player)
+                    .ifPresent(team -> assignOwnerTeam(team.getId()));
         } catch (RuntimeException exception) {
             LOGGER.error("Failed to resolve owner team for detector at {}", getBlockPos(), exception);
         }
-        if (!Objects.equals(previous, this.ownerTeamId)) {
-            DetectorEntityList.notifyOwnerTeamIdChanged(this, previous);
-        }
+    }
+
+    public void setOwnerTeamId(UUID teamId) {
+        assignOwnerTeam(teamId);
     }
 
     public boolean isNetworkConflict() {
@@ -129,6 +128,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     public void tick() {
         if (this.isRemoved() || this.level == null) {
             return;
+        }
+        if (teamValidationRetryTicks > 0 && --teamValidationRetryTicks == 0) {
+            requestConflictAndBlockStateRefresh();
         }
         try {
             stateRefreshQueue.runPending(this::refreshConflictAndBlockState);
@@ -143,11 +145,6 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
     }
 
-    /** 重建当前可执行任务缓存。 */
-    public void markCacheDirty() {
-        detectionService.markCacheDirty();
-    }
-
     /** 仅使可执行任务视图失效。 */
     public void markActiveCacheDirty() {
         detectionService.markActiveCacheDirty();
@@ -157,33 +154,56 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         detectionService.requestReconnect();
     }
 
+    public TeamOwnershipValidator.Status getOwnerTeamStatus() {
+        return TeamOwnershipValidator.getStatus(ownerTeamId);
+    }
+
+    void onOwnerTeamStatusChanged() {
+        detectionService.markActiveCacheDirty();
+        requestConflictAndBlockStateRefresh();
+    }
+
+    void reassignOwnerTeam(UUID newTeamId) {
+        assignOwnerTeam(newTeamId);
+    }
+
+    private void assignOwnerTeam(UUID newTeamId) {
+        UUID previousTeamId = ownerTeamId;
+        if (newTeamId == null || Objects.equals(previousTeamId, newTeamId)) {
+            return;
+        }
+        String resolvedTeamName = TeamDisplayNameResolver.resolveRawTeamName(newTeamId, null);
+        ownerTeamId = newTeamId;
+        ownerTeamNameCache = resolvedTeamName;
+        shortNameWarnedPlayers.clear();
+        detectionService.markCacheDirty();
+        DetectorEntityList.notifyOwnerTeamIdChanged(this, previousTeamId);
+        requestConflictAndBlockStateRefresh();
+        setChanged();
+    }
+
     @Override
     public void onReady() {
         stateRefreshQueue.activate();
-        detectionService.onLoaded();
+        detectionService.onLoaded(this);
         super.onReady();
+        lifecycleLoaded = true;
         requestReconnect();
-        DetectorEntityList.register(this);
+        IGrid grid = getMainNode().getGrid();
+        DetectorEntityList.register(this, grid);
         requestConflictAndBlockStateRefresh();
+        requestGridPeersRefresh(grid);
     }
 
     @Override
     public void onChunkUnloaded() {
-        stateRefreshQueue.deactivate();
-        detectionService.onUnloaded();
-        shortNameWarnedPlayers.clear();
-        notifyGridPeersOnLeave();
-        DetectorEntityList.unregister(this);
+        unloadDetector();
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
-        stateRefreshQueue.deactivate();
-        detectionService.onUnloaded();
-        shortNameWarnedPlayers.clear();
-        notifyGridPeersOnLeave();
-        DetectorEntityList.unregister(this);
+        unloadDetector();
         super.setRemoved();
     }
 
@@ -195,14 +215,10 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
         requestConflictAndBlockStateRefresh();
         IGrid grid = getMainNode().getGrid();
-        if (grid != null) {
-            List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
-            for (int i = 0; i < peers.size(); i++) {
-                DetectorBlockEntity peer = peers.get(i);
-                if (peer != this) {
-                    peer.requestConflictAndBlockStateRefresh();
-                }
-            }
+        IGrid previousGrid = DetectorEntityList.updateGrid(this, grid);
+        requestGridPeersRefresh(previousGrid);
+        if (grid != previousGrid) {
+            requestGridPeersRefresh(grid);
         }
     }
 
@@ -219,15 +235,25 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         boolean conflict = false;
         if (nodeActive) {
             IGrid grid = getMainNode().getGrid();
+            IGrid previousGrid = DetectorEntityList.updateGrid(this, grid);
+            if (previousGrid != grid) {
+                requestGridPeersRefresh(previousGrid);
+            }
             if (grid != null) {
-                List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
+                List<DetectorBlockEntity> peers = DetectorEntityList.copyForGrid(grid);
                 conflict = peers.size() > 1;
             }
         }
         boolean conflictChanged = conflict != this.networkConflict;
         this.networkConflict = conflict;
 
-        boolean shouldPower = nodeActive && !conflict;
+        TeamOwnershipValidator.Status teamStatus = getOwnerTeamStatus();
+        if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+            teamValidationRetryTicks = 20;
+        } else {
+            teamValidationRetryTicks = 0;
+        }
+        boolean shouldPower = nodeActive && !conflict && teamStatus == TeamOwnershipValidator.Status.USABLE;
         BlockState current = getBlockState();
         if (current.hasProperty(DetectorBlock.POWERED)
                 && current.getValue(DetectorBlock.POWERED) != shouldPower) {
@@ -242,21 +268,26 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
     }
 
-    private void notifyGridPeersOnLeave() {
-        try {
-            IGrid grid = getMainNode().getGrid();
-            if (grid == null) {
-                return;
+    private void unloadDetector() {
+        if (!lifecycleLoaded) {
+            return;
+        }
+        lifecycleLoaded = false;
+        teamValidationRetryTicks = 0;
+        stateRefreshQueue.deactivate();
+        long gameTime = level == null ? 0L : level.getGameTime();
+        detectionService.onUnloaded(this, gameTime);
+        shortNameWarnedPlayers.clear();
+        IGrid previousGrid = DetectorEntityList.unregister(this);
+        requestGridPeersRefresh(previousGrid);
+    }
+
+    private void requestGridPeersRefresh(IGrid grid) {
+        List<DetectorBlockEntity> peers = DetectorEntityList.copyForGrid(grid);
+        for (DetectorBlockEntity peer : peers) {
+            if (peer != this && !peer.isRemoved()) {
+                peer.requestConflictAndBlockStateRefresh();
             }
-            List<DetectorBlockEntity> peers = DetectorEntityList.findInGrid(grid);
-            for (int i = 0; i < peers.size(); i++) {
-                DetectorBlockEntity peer = peers.get(i);
-                if (peer != this) {
-                    peer.requestConflictAndBlockStateRefresh();
-                }
-            }
-        } catch (RuntimeException exception) {
-            LOGGER.debug("Failed to notify detector grid peers while unloading {}", getBlockPos(), exception);
         }
     }
 }

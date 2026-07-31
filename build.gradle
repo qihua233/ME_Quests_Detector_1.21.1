@@ -54,6 +54,7 @@ repositories {
     maven { url = "https://maven.architectury.dev" }
     maven { url = "https://maven.saps.dev/minecraft" }
     maven { url = "https://maven.blamejared.com/" }
+    maven { url = "https://maven.shedaniel.me/" }
     maven {
         name = "ModMaven"
         url = "https://modmaven.dev"
@@ -101,6 +102,9 @@ dependencies {
     implementation "curse.maven:ftb-quests-forge-289412:7878289"
     implementation "curse.maven:ftb-teams-forge-404468:7878281"
     implementation "curse.maven:ftb-library-forge-404465:7746959"
+
+    // Cloth Config v15 (NeoForge 1.21.1 client configuration screen)
+    implementation "me.shedaniel.cloth:cloth-config-neoforge:${cloth_config_version}"
 
     // 辅助测试与开发 (可以根据需要解除注释)
     implementation "curse.maven:guideme-1173950:7127444"

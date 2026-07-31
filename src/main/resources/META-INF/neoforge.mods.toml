@@ -52,5 +52,12 @@ versionRange="[0,)"
 ordering="AFTER"
 side="BOTH"
 
+[[dependencies."${mod_id}"]]
+modId="cloth_config"
+type="required"
+versionRange="[15.0.140,16.0)"
+ordering="NONE"
+side="CLIENT"
+
 [[mixins]]
 config="ae2_ftbquest_detector.mixins.json"

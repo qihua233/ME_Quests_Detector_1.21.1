@@ -3,11 +3,13 @@ package io.github.qihua233.ae2_ftbquest_detector.integration.jade;
 import dev.ftb.mods.ftbquests.quest.ServerQuestFile;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.Task;
+import com.mojang.logging.LogUtils;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import io.github.qihua233.ae2_ftbquest_detector.utility.BoundedExpiringCache;
 import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -20,18 +22,23 @@ import snownee.jade.api.config.IPluginConfig;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.Logger;
 
 public class DetectorProvider implements IBlockComponentProvider, IServerDataProvider<BlockAccessor> {
     public static final DetectorProvider INSTANCE = new DetectorProvider();
     public static final ResourceLocation UID = ResourceLocation.fromNamespaceAndPath("ae2_ftbquest_detector", "detector");
+    private static final Logger LOGGER = LogUtils.getLogger();
 
     private static final long JADE_TASK_STATS_TTL_MS = 1000L;
     private static final int JADE_TASK_STATS_MAX_ENTRIES = 512;
     private static ServerQuestFile jadeTaskStatsFileRef;
-    private static final BoundedExpiringCache<UUID, JadeTaskStats> JADE_TASK_STATS =
+    private static final BoundedExpiringCache<JadeTaskStatsCacheKey, JadeTaskStats> JADE_TASK_STATS =
             new BoundedExpiringCache<>(JADE_TASK_STATS_MAX_ENTRIES);
 
     private record JadeTaskStats(int completed, int total) {
+    }
+
+    private record JadeTaskStatsCacheKey(UUID teamId, boolean ignoreHidden, boolean ignoreRepeatable) {
     }
 
     @Override
@@ -41,15 +48,34 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.network_conflict"));
             return;
         }
+        if (data.getBoolean("EmptyOwnerTeam") || data.getBoolean("InvalidOwnerTeam")) {
+            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.invalid_owner"));
+            return;
+        }
+        if (data.getBoolean("NoOwnerTeam")) {
+            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.no_owner"));
+            return;
+        }
+        if (data.getBoolean("TemporaryOwnerTeam")) {
+            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.uncharged"));
+            return;
+        }
         boolean isPowered = accessor.getBlockState().getValue(Objects.requireNonNull(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED));
         if (!isPowered) {
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.uncharged"));
             return;
         }
         if (Config.jadeShowOwnerInfo) {
-            if (data.contains("TeamName")) {
-                String teamName = data.getString("TeamName");
-                tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName));
+            if (data.hasUUID("TeamId")) {
+                UUID teamId = data.getUUID("TeamId");
+                String rawTeamName = data.contains("RawTeamName") ? data.getString("RawTeamName") : null;
+                String teamName = rawTeamName != null
+                        ? TeamDisplayNameResolver.formatDisplayName(rawTeamName, teamId, Config.teamNameDisplayMode)
+                        : TeamDisplayNameResolver.resolveExistingTeamName(
+                                teamId, null, Config.teamNameDisplayMode);
+                if (teamName != null) {
+                    tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName));
+                }
             } else {
                 tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.no_owner"));
             }
@@ -64,6 +90,14 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
 
     @Override
     public void appendServerData(CompoundTag data, BlockAccessor accessor) {
+        try {
+            appendServerDataInternal(data, accessor);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to build Jade data for detector", exception);
+        }
+    }
+
+    private void appendServerDataInternal(CompoundTag data, BlockAccessor accessor) {
         if (!FtbRuntime.isAvailable()) {
             return;
         }
@@ -72,15 +106,29 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
                 data.putBoolean("NetworkConflict", true);
                 return;
             }
+            TeamOwnershipValidator.Status teamStatus = detector.getOwnerTeamStatus();
+            if (teamStatus == TeamOwnershipValidator.Status.EMPTY
+                    || teamStatus == TeamOwnershipValidator.Status.INVALID) {
+                data.putBoolean("InvalidOwnerTeam", true);
+                return;
+            }
+            if (teamStatus == TeamOwnershipValidator.Status.NONE) {
+                data.putBoolean("NoOwnerTeam", true);
+                return;
+            }
+            if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+                data.putBoolean("TemporaryOwnerTeam", true);
+                return;
+            }
             if (detector.ownerTeamId != null) {
-                if (Config.jadeShowOwnerInfo) {
-                    String teamName = TeamDisplayNameResolver.resolveExistingTeamName(detector.ownerTeamId, detector.ownerTeamNameCache);
-                    if (teamName != null) {
-                        data.putString("TeamName", teamName);
-                    }
+                data.putUUID("TeamId", detector.ownerTeamId);
+                String rawTeamName = TeamDisplayNameResolver.resolveRawTeamName(
+                        detector.ownerTeamId, detector.ownerTeamNameCache);
+                if (rawTeamName != null) {
+                    data.putString("RawTeamName", rawTeamName);
                 }
 
-                if (Config.jadeShowTaskProgress && ServerQuestFile.INSTANCE != null) {
+                if (ServerQuestFile.INSTANCE != null) {
                     TeamData teamData = ServerQuestFile.INSTANCE.getNullableTeamData(detector.ownerTeamId);
                     if (teamData != null) {
                         JadeTaskStats stats = computeOrGetCachedTaskStats(ServerQuestFile.INSTANCE, teamData, detector.ownerTeamId);
@@ -98,20 +146,31 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
             JADE_TASK_STATS.clear();
             jadeTaskStatsFileRef = file;
         }
-        JadeTaskStats cached = JADE_TASK_STATS.get(teamId, now);
+        boolean ignoreHidden = Config.serverJadeTaskProgressIgnoreHiddenTasks;
+        boolean ignoreRepeatable = Config.serverJadeTaskProgressIgnoreRepeatableTasks;
+        JadeTaskStatsCacheKey cacheKey = new JadeTaskStatsCacheKey(teamId, ignoreHidden, ignoreRepeatable);
+        JadeTaskStats cached = JADE_TASK_STATS.get(cacheKey, now);
         if (cached != null) {
             return cached;
         }
         List<Task> tasks = file.getAllTasks();
-        int total = tasks.size();
+        int total = 0;
         int completed = 0;
         for (Task task : tasks) {
+            if (!JadeTaskFilterPolicy.include(
+                    task.getQuest().isVisible(teamData),
+                    task.getQuest().canBeRepeated(),
+                    ignoreHidden,
+                    ignoreRepeatable)) {
+                continue;
+            }
+            total++;
             if (teamData.isCompleted(task)) {
                 completed++;
             }
         }
         JadeTaskStats stats = new JadeTaskStats(completed, total);
-        JADE_TASK_STATS.put(teamId, stats, now + JADE_TASK_STATS_TTL_MS, now);
+        JADE_TASK_STATS.put(cacheKey, stats, now + JADE_TASK_STATS_TTL_MS, now);
         return stats;
     }
 

@@ -4,6 +4,8 @@ import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlockEntities;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModBlocks;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModItems;
 import io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents;
+import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorTeamSyncHandler;
+import io.github.qihua233.ae2_ftbquest_detector.network.DetectorNetwork;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -16,7 +18,6 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import appeng.api.AECapabilities;
-import appeng.api.networking.IInWorldGridNodeHost;
 
 @Mod(Ae2_ftbquest_detector.MODID)
 @SuppressWarnings("null")
@@ -39,15 +40,19 @@ public class Ae2_ftbquest_detector {
         modEventBus.addListener(this::addCreative);
         modEventBus.addListener(Config::onLoad);
         modEventBus.addListener(this::registerCapabilities);
+        modEventBus.addListener(DetectorNetwork::registerPayloads);
 
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.COMMON_SPEC, "ae2_ftbquest_detector-common.toml");
+        DetectorTeamSyncHandler.register();
+
+        modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC, "ae2_ftbquest_detector-client.toml");
+        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC, "ae2_ftbquest_detector-server.toml");
     }
 
     private void registerCapabilities(RegisterCapabilitiesEvent event) {
         event.registerBlockEntity(
                 AECapabilities.IN_WORLD_GRID_NODE_HOST,
                 ModBlockEntities.DETECTOR_BLOCK_ENTITY.get(),
-                (be, context) -> (IInWorldGridNodeHost) be
+                (be, context) -> be
         );
     }
 

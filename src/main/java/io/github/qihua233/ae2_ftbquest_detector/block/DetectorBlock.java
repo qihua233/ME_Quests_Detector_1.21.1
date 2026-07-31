@@ -2,8 +2,9 @@ package io.github.qihua233.ae2_ftbquest_detector.block;
 
 
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
-import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorEntityList;
+import io.github.qihua233.ae2_ftbquest_detector.network.DetectorOwnerPayload;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
+import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -28,6 +29,7 @@ import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.NotNull;
 import org.slf4j.Logger;
 
@@ -65,7 +67,8 @@ public class DetectorBlock extends Block implements EntityBlock {
 
     @Nullable
     @Override
-    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> blockEntityType) {
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(@NotNull Level level, @NotNull BlockState state,
+                                                                  @NotNull BlockEntityType<T> blockEntityType) {
         if (level.isClientSide) {
             return null;
         }
@@ -78,7 +81,7 @@ public class DetectorBlock extends Block implements EntityBlock {
 
 
     @Override
-    protected ItemInteractionResult useItemOn(@NotNull ItemStack stack, @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
+    protected @NotNull ItemInteractionResult useItemOn(@NotNull ItemStack stack, @NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
                                  @NotNull Player player, @NotNull InteractionHand hand, @NotNull BlockHitResult hit) {
         if (hand != InteractionHand.MAIN_HAND) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
@@ -86,56 +89,58 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!stack.isEmpty()) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
-        if (level.isClientSide || !(player instanceof ServerPlayer)) {
+        if (level.isClientSide || !(player instanceof ServerPlayer serverPlayer)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         BlockEntity be = level.getBlockEntity(pos);
         if (be instanceof DetectorBlockEntity detector && detector.isNetworkConflict()) {
             Component message = Component.translatable("ae2-ftbquests-detector.detector.network_conflict");
-            ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+            serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(
                     message
             ));
             return ItemInteractionResult.SUCCESS;
         }
-        if (!state.getValue(POWERED)) {
-            Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
-            ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(message));
-            return ItemInteractionResult.SUCCESS;
-        }
-
         if (be instanceof DetectorBlockEntity detector) {
-            if(detector.ownerTeamId == null)
-            {
+            TeamOwnershipValidator.Status teamStatus = detector.getOwnerTeamStatus();
+            if (teamStatus == TeamOwnershipValidator.Status.NONE) {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.no_owner");
-                ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                        message
-                ));
+                serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
             }
-            else
-            {
+            if (teamStatus == TeamOwnershipValidator.Status.EMPTY
+                    || teamStatus == TeamOwnershipValidator.Status.INVALID) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
+                serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
+            }
+            if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
+                serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
+            }
+            if (!state.getValue(POWERED)) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
+                serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
+            }
+
+            if (detector.ownerTeamId != null) {
                 try {
-                    String teamName = TeamDisplayNameResolver.resolveExistingTeamName(detector.ownerTeamId, detector.ownerTeamNameCache);
-                    if (teamName != null) {
-                        Component message = Component.translatable("ae2-ftbquests-detector.detector.owner_is", teamName);
-                        ServerPlayer serverPlayer = (ServerPlayer) player;
-                        serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(
-                                message
-                        ));
-                        if (!detector.shortNameWarnedPlayers.contains(serverPlayer.getUUID()) && TeamDisplayNameResolver.isTeamNameTooShort(detector.ownerTeamId, detector.ownerTeamNameCache, 3)) {
+                    String rawTeamName = TeamDisplayNameResolver.resolveRawTeamName(
+                            detector.ownerTeamId, detector.ownerTeamNameCache);
+                    if (rawTeamName != null) {
+                        PacketDistributor.sendToPlayer(serverPlayer,
+                                new DetectorOwnerPayload(detector.ownerTeamId, rawTeamName));
+                        if (TeamDisplayNameResolver.isTeamNameTooShort(detector.ownerTeamId, detector.ownerTeamNameCache, 3)
+                                && detector.shortNameWarnedPlayers.add(serverPlayer.getUUID())) {
                             serverPlayer.displayClientMessage(Component.translatable("ae2-ftbquests-detector.detector.team_name_too_short"), false);
-                            detector.shortNameWarnedPlayers.add(serverPlayer.getUUID());
                         }
-                    } else {
-                        Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
-                        ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
-                                message
-                        ));
                     }
                 }
                 catch (RuntimeException exception) {
                     LOGGER.error("Failed to resolve detector owner at {}", pos, exception);
                     Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
-                    ((ServerPlayer) player).connection.send(new ClientboundSetActionBarTextPacket(
+                    serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(
                             message)
                     );
                 }
@@ -150,15 +155,10 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
-                UUID previousTeamId = d.ownerTeamId;
                 d.setOwner(player);
                 UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
                 if (teamId != null) {
-                    d.ownerTeamId = teamId;
-                    d.ownerTeamNameCache = TeamDisplayNameResolver.resolveRawTeamName(teamId, null);
-                    d.shortNameWarnedPlayers.clear();
-                    d.markCacheDirty();
-                    DetectorEntityList.notifyOwnerTeamIdChanged(d, previousTeamId);
+                    d.setOwnerTeamId(teamId);
                 } else {
                     d.setOwnerTeam(player);
                 }
