@@ -78,7 +78,7 @@ final class DetectorDetectionService {
     synchronized void markCacheDirty() {
         cacheDirty = true;
         activeCacheDirty = true;
-        clearDerivedState();
+        pendingKeyAmounts.clear();
         requestFullScan();
     }
 
@@ -97,6 +97,44 @@ final class DetectorDetectionService {
     synchronized void requestFullScan() {
         fullScanPending = true;
         stateDirty = true;
+    }
+
+    /** Persists queued progress before the detector changes team or task objects are invalidated. */
+    synchronized boolean persistPendingProgress(DetectorBlockEntity detector, UUID teamId) {
+        if (progressUpdates.isEmpty()) {
+            return true;
+        }
+        MinecraftServer server = getServer(detector);
+        if (server == null || teamId == null) {
+            LOGGER.warn("Cannot persist pending detector progress at {} because its server context is unavailable",
+                    detector.getBlockPos());
+            return false;
+        }
+
+        long gameTime = detector.getLevel() instanceof ServerLevel serverLevel
+                ? serverLevel.getGameTime()
+                : 0L;
+        try {
+            flushProgress(detector, gameTime, true);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to flush pending detector progress for team {}; retaining it for retry",
+                    teamId, exception);
+        }
+        if (progressUpdates.isEmpty()) {
+            return true;
+        }
+
+        try {
+            progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) ->
+                    DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress));
+            immediateProgressFlushPending = false;
+            nextPartialProgressFlushGameTime = Long.MIN_VALUE;
+            return progressUpdates.isEmpty();
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to persist pending detector progress for team {}; retrying later",
+                    teamId, exception);
+            return false;
+        }
     }
 
     synchronized void onLoaded(DetectorBlockEntity detector) {

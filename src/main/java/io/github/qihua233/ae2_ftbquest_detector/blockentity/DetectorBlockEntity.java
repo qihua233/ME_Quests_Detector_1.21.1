@@ -47,6 +47,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean lifecycleLoaded;
     private int teamValidationRetryTicks;
     private boolean delayedTeamRevalidation;
+    private UUID pendingOwnerTeamId;
+    private int pendingOwnerTeamRetryTicks;
     private int tickCount = 0;
 
     public DetectorBlockEntity(BlockPos pos, BlockState state) {
@@ -130,6 +132,10 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (this.isRemoved() || this.level == null) {
             return;
         }
+        if (pendingOwnerTeamRetryTicks > 0 && --pendingOwnerTeamRetryTicks == 0
+                && pendingOwnerTeamId != null) {
+            assignOwnerTeam(pendingOwnerTeamId);
+        }
         if (teamValidationRetryTicks > 0 && --teamValidationRetryTicks == 0) {
             delayedTeamRevalidation = false;
             reconcileOwnerTeam();
@@ -169,6 +175,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     void onQuestFileReloaded() {
+        detectionService.persistPendingProgress(this, ownerTeamId);
         detectionService.markCacheDirty();
         requestConflictAndBlockStateRefresh();
     }
@@ -182,9 +189,16 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (newTeamId == null || Objects.equals(previousTeamId, newTeamId)) {
             return;
         }
+        if (previousTeamId != null && !detectionService.persistPendingProgress(this, previousTeamId)) {
+            pendingOwnerTeamId = newTeamId;
+            pendingOwnerTeamRetryTicks = 20;
+            return;
+        }
         String resolvedTeamName = TeamDisplayNameResolver.resolveRawTeamName(newTeamId, null);
         ownerTeamId = newTeamId;
         ownerTeamNameCache = resolvedTeamName;
+        pendingOwnerTeamId = null;
+        pendingOwnerTeamRetryTicks = 0;
         shortNameWarnedPlayers.clear();
         detectionService.markCacheDirty();
         DetectorEntityList.notifyOwnerTeamIdChanged(this, previousTeamId);
@@ -293,6 +307,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         lifecycleLoaded = false;
         teamValidationRetryTicks = 0;
         delayedTeamRevalidation = false;
+        pendingOwnerTeamId = null;
+        pendingOwnerTeamRetryTicks = 0;
         stateRefreshQueue.deactivate();
         long gameTime = level == null ? 0L : level.getGameTime();
         detectionService.onUnloaded(this, gameTime);
