@@ -174,6 +174,11 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
         return stats;
     }
 
+    public static synchronized void invalidateTaskStatsCache() {
+        JADE_TASK_STATS.clear();
+        jadeTaskStatsFileRef = null;
+    }
+
     @Override
     public ResourceLocation getUid() {
         return UID;

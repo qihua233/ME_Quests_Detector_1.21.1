@@ -351,8 +351,7 @@ final class DetectorDetectionService {
     private boolean isOwnerTeamDefinitelyUnavailable(DetectorBlockEntity detector) {
         TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(detector.ownerTeamId);
         return status == TeamOwnershipValidator.Status.NONE
-                || status == TeamOwnershipValidator.Status.EMPTY
-                || status == TeamOwnershipValidator.Status.INVALID;
+                || status == TeamOwnershipValidator.Status.EMPTY;
     }
 
     private void restoreProgressAfterReload(DetectorBlockEntity detector) {
@@ -364,8 +363,7 @@ final class DetectorDetectionService {
 
         TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(teamId);
         if (status == TeamOwnershipValidator.Status.NONE
-                || status == TeamOwnershipValidator.Status.EMPTY
-                || status == TeamOwnershipValidator.Status.INVALID) {
+                || status == TeamOwnershipValidator.Status.EMPTY) {
             DetectorProgressRecoveryStore.discard(server, teamId);
             return;
         }

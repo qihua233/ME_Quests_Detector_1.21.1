@@ -46,6 +46,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     private boolean networkConflict = false;
     private boolean lifecycleLoaded;
     private int teamValidationRetryTicks;
+    private boolean delayedTeamRevalidation;
     private int tickCount = 0;
 
     public DetectorBlockEntity(BlockPos pos, BlockState state) {
@@ -130,6 +131,8 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
             return;
         }
         if (teamValidationRetryTicks > 0 && --teamValidationRetryTicks == 0) {
+            delayedTeamRevalidation = false;
+            reconcileOwnerTeam();
             requestConflictAndBlockStateRefresh();
         }
         try {
@@ -160,6 +163,13 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     void onOwnerTeamStatusChanged() {
         detectionService.markActiveCacheDirty();
+        delayedTeamRevalidation = true;
+        teamValidationRetryTicks = 20;
+        requestConflictAndBlockStateRefresh();
+    }
+
+    void onQuestFileReloaded() {
+        detectionService.markCacheDirty();
         requestConflictAndBlockStateRefresh();
     }
 
@@ -182,9 +192,17 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         setChanged();
     }
 
+    private void reconcileOwnerTeam() {
+        UUID effectiveTeamId = TeamOwnershipValidator.resolveEffectiveTeamId(ownerTeamId);
+        if (effectiveTeamId != null && !Objects.equals(effectiveTeamId, ownerTeamId)) {
+            assignOwnerTeam(effectiveTeamId);
+        }
+    }
+
     @Override
     public void onReady() {
         stateRefreshQueue.activate();
+        reconcileOwnerTeam();
         detectionService.onLoaded(this);
         super.onReady();
         lifecycleLoaded = true;
@@ -250,7 +268,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         TeamOwnershipValidator.Status teamStatus = getOwnerTeamStatus();
         if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
             teamValidationRetryTicks = 20;
-        } else {
+        } else if (!delayedTeamRevalidation) {
             teamValidationRetryTicks = 0;
         }
         boolean shouldPower = nodeActive && !conflict && teamStatus == TeamOwnershipValidator.Status.USABLE;
@@ -274,6 +292,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
         lifecycleLoaded = false;
         teamValidationRetryTicks = 0;
+        delayedTeamRevalidation = false;
         stateRefreshQueue.deactivate();
         long gameTime = level == null ? 0L : level.getGameTime();
         detectionService.onUnloaded(this, gameTime);

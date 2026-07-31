@@ -166,6 +166,23 @@ public final class DetectorEntityList {
         }
     }
 
+    /** Invalidates all task caches after FTB Quests reloads its task objects. */
+    public static void markAllTaskCachesDirty() {
+        List<DetectorBlockEntity> list;
+        synchronized (TRACKED_ENTITIES) {
+            list = new ArrayList<>(TRACKED_ENTITIES);
+        }
+        for (DetectorBlockEntity be : list) {
+            if (be != null && !be.isRemoved()) {
+                try {
+                    be.onQuestFileReloaded();
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Failed to invalidate detector quest cache at {}", be.getBlockPos(), exception);
+                }
+            }
+        }
+    }
+
     private static Set<DetectorBlockEntity> newWeakSet() {
         return Collections.newSetFromMap(new WeakHashMap<>());
     }

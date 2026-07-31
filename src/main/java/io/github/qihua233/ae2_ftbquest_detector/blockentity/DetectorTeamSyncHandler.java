@@ -1,6 +1,7 @@
 package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
 import com.mojang.logging.LogUtils;
+import dev.ftb.mods.ftbquests.events.ClearFileCacheEvent;
 import dev.ftb.mods.ftbteams.api.Team;
 import dev.ftb.mods.ftbteams.api.event.PlayerChangedTeamEvent;
 import dev.ftb.mods.ftbteams.api.event.PlayerJoinedPartyTeamEvent;
@@ -26,6 +27,7 @@ public final class DetectorTeamSyncHandler {
         TeamEvent.PLAYER_LOGGED_IN.register(DetectorTeamSyncHandler::onPlayerLoggedIn);
         TeamEvent.DELETED.register(DetectorTeamSyncHandler::onTeamEvent);
         TeamManagerEvent.LOADED.register(event -> DetectorEntityList.refreshAllTeamStatuses());
+        ClearFileCacheEvent.EVENT.register(ignored -> DetectorEntityList.markAllTaskCachesDirty());
     }
 
     private static void onPlayerChanged(PlayerChangedTeamEvent event) {
@@ -62,7 +64,11 @@ public final class DetectorTeamSyncHandler {
     }
 
     private static void onPlayerLoggedIn(PlayerLoggedInAfterTeamEvent event) {
-        refresh(event.getTeam());
+        Team currentTeam = event.getTeam();
+        if (currentTeam != null) {
+            DetectorEntityList.reassignTeamDetectors(event.getPlayer().getUUID(), currentTeam.getId());
+        }
+        refresh(currentTeam);
     }
 
     private static void onTeamEvent(TeamEvent event) {

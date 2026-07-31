@@ -51,6 +51,30 @@ class CoalescingLongQueueTest {
     }
 
     @Test
+    void failedHeadDoesNotBlockFollowingEntries() {
+        CoalescingLongQueue<Object> queue = new CoalescingLongQueue<>();
+        Object failed = new Object();
+        Object following = new Object();
+        List<Object> processed = new ArrayList<>();
+        queue.offerMax(failed, 1L);
+        queue.offerMax(following, 2L);
+
+        assertThrows(IllegalStateException.class, () -> queue.drain(2, (key, value) -> {
+            if (key == failed) {
+                throw new IllegalStateException("temporary");
+            }
+            processed.add(key);
+        }));
+
+        assertEquals(List.of(following), processed);
+        assertEquals(1, queue.size());
+        assertEquals(1, queue.drain(1, (key, value) -> {
+            assertEquals(failed, key);
+            assertEquals(1L, value);
+        }));
+    }
+
+    @Test
     void equalButDistinctKeysRemainIndependent() {
         CoalescingLongQueue<String> queue = new CoalescingLongQueue<>();
         String first = new String("task");

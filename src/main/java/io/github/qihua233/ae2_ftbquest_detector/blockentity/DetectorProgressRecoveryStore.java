@@ -1,6 +1,12 @@
 package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -8,15 +14,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.WeakHashMap;
 
 /**
  * Keeps detector progress that could not be written before a chunk unload.
- * The server key is weak so a stopped server cannot be retained by this store.
+ * The ledger is stored in the overworld SavedData so it survives normal server restarts.
  */
 final class DetectorProgressRecoveryStore {
     static final int MAX_PENDING_ENTRIES = 8192;
-    private static final Map<MinecraftServer, PendingProgressLedger> LEDGERS = new WeakHashMap<>();
+    private static final String DATA_ID = "ae2_ftbquest_detector_progress";
+    private static final SavedData.Factory<PendingProgressSavedData> FACTORY =
+            new SavedData.Factory<>(PendingProgressSavedData::new, PendingProgressSavedData::load);
 
     private DetectorProgressRecoveryStore() {
     }
@@ -25,9 +32,9 @@ final class DetectorProgressRecoveryStore {
         if (server == null || teamId == null || taskId <= 0L || targetProgress <= 0L) {
             return;
         }
-        synchronized (LEDGERS) {
-            LEDGERS.computeIfAbsent(server, ignored -> new PendingProgressLedger())
-                    .merge(teamId, taskId, targetProgress);
+        PendingProgressSavedData data = getOrCreate(server);
+        if (data != null) {
+            data.merge(teamId, taskId, targetProgress);
         }
     }
 
@@ -35,25 +42,17 @@ final class DetectorProgressRecoveryStore {
         if (server == null || teamId == null) {
             return List.of();
         }
-        synchronized (LEDGERS) {
-            PendingProgressLedger ledger = LEDGERS.get(server);
-            return ledger == null ? List.of() : ledger.copyFor(teamId);
-        }
+        PendingProgressSavedData data = getExisting(server);
+        return data == null ? List.of() : data.copyFor(teamId);
     }
 
     static void remove(MinecraftServer server, UUID teamId, long taskId) {
         if (server == null || teamId == null || taskId <= 0L) {
             return;
         }
-        synchronized (LEDGERS) {
-            PendingProgressLedger ledger = LEDGERS.get(server);
-            if (ledger == null) {
-                return;
-            }
-            ledger.remove(teamId, taskId);
-            if (ledger.isEmpty()) {
-                LEDGERS.remove(server);
-            }
+        PendingProgressSavedData data = getExisting(server);
+        if (data != null) {
+            data.remove(teamId, taskId);
         }
     }
 
@@ -61,19 +60,93 @@ final class DetectorProgressRecoveryStore {
         if (server == null || teamId == null) {
             return;
         }
-        synchronized (LEDGERS) {
-            PendingProgressLedger ledger = LEDGERS.get(server);
-            if (ledger == null) {
-                return;
-            }
-            ledger.discard(teamId);
-            if (ledger.isEmpty()) {
-                LEDGERS.remove(server);
-            }
+        PendingProgressSavedData data = getExisting(server);
+        if (data != null) {
+            data.discard(teamId);
         }
     }
 
+    private static PendingProgressSavedData getOrCreate(MinecraftServer server) {
+        ServerLevel overworld = server.overworld();
+        if (overworld == null) {
+            return null;
+        }
+        return overworld.getDataStorage().computeIfAbsent(FACTORY, DATA_ID);
+    }
+
+    private static PendingProgressSavedData getExisting(MinecraftServer server) {
+        ServerLevel overworld = server.overworld();
+        if (overworld == null) {
+            return null;
+        }
+        return overworld.getDataStorage().get(FACTORY, DATA_ID);
+    }
+
     record PendingProgress(long taskId, long targetProgress) {
+    }
+
+    private static final class PendingProgressSavedData extends SavedData {
+        private final PendingProgressLedger ledger = new PendingProgressLedger();
+
+        private static PendingProgressSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
+            PendingProgressSavedData data = new PendingProgressSavedData();
+            ListTag entries = tag.getList("entries", Tag.TAG_COMPOUND);
+            for (int index = 0; index < entries.size(); index++) {
+                CompoundTag entry = entries.getCompound(index);
+                if (!entry.hasUUID("teamId") || !entry.contains("taskId", Tag.TAG_LONG)
+                        || !entry.contains("targetProgress", Tag.TAG_LONG)) {
+                    continue;
+                }
+                long taskId = entry.getLong("taskId");
+                long targetProgress = entry.getLong("targetProgress");
+                if (taskId > 0L && targetProgress > 0L) {
+                    data.ledger.merge(entry.getUUID("teamId"), taskId, targetProgress);
+                }
+            }
+            return data;
+        }
+
+        private void merge(UUID teamId, long taskId, long targetProgress) {
+            ledger.merge(teamId, taskId, targetProgress);
+            setDirty();
+        }
+
+        private List<PendingProgress> copyFor(UUID teamId) {
+            return ledger.copyFor(teamId);
+        }
+
+        private void remove(UUID teamId, long taskId) {
+            int before = ledger.size();
+            ledger.remove(teamId, taskId);
+            if (ledger.size() != before) {
+                setDirty();
+            }
+        }
+
+        private void discard(UUID teamId) {
+            int before = ledger.size();
+            ledger.discard(teamId);
+            if (ledger.size() != before) {
+                setDirty();
+            }
+        }
+
+        @Override
+        public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+            ListTag entries = new ListTag();
+            for (PendingProgressEntry entry : ledger.snapshot()) {
+                CompoundTag value = new CompoundTag();
+                value.putUUID("teamId", entry.teamId());
+                value.putLong("taskId", entry.taskId());
+                value.putLong("targetProgress", entry.targetProgress());
+                entries.add(value);
+            }
+            tag.put("entries", entries);
+            return tag;
+        }
+    }
+
+    private record PendingProgressEntry(UUID teamId, long taskId, long targetProgress) {
     }
 
     static final class PendingProgressLedger {
@@ -117,6 +190,15 @@ final class DetectorProgressRecoveryStore {
                 if (entry.getKey().teamId().equals(teamId)) {
                     result.add(new PendingProgress(entry.getKey().taskId(), entry.getValue()));
                 }
+            }
+            return result;
+        }
+
+        synchronized List<PendingProgressEntry> snapshot() {
+            List<PendingProgressEntry> result = new ArrayList<>(values.size());
+            for (Map.Entry<PendingKey, Long> entry : values.entrySet()) {
+                PendingKey key = entry.getKey();
+                result.add(new PendingProgressEntry(key.teamId(), key.taskId(), entry.getValue()));
             }
             return result;
         }

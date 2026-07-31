@@ -51,6 +51,29 @@ public final class TeamOwnershipValidator {
         return resolution.status() == Status.USABLE ? resolution.team() : null;
     }
 
+    /** Resolves a persisted personal-team id to the player's current effective team. */
+    public static UUID resolveEffectiveTeamId(UUID persistedTeamId) {
+        if (persistedTeamId == null) {
+            return null;
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            if (manager == null) {
+                return persistedTeamId;
+            }
+            Team personalTeam = manager.getPersonalTeamForPlayerID(persistedTeamId);
+            if (personalTeam == null || !persistedTeamId.equals(personalTeam.getId())) {
+                return persistedTeamId;
+            }
+            return manager.getTeamForPlayerID(persistedTeamId)
+                    .map(Team::getId)
+                    .orElse(persistedTeamId);
+        } catch (RuntimeException exception) {
+            logTransientFailure(persistedTeamId, exception);
+            return persistedTeamId;
+        }
+    }
+
     private static Resolution resolve(UUID teamId) {
         if (teamId == null) {
             return new Resolution(Status.NONE, null);

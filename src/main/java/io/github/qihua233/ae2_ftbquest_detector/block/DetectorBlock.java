@@ -155,11 +155,15 @@ public class DetectorBlock extends Block implements EntityBlock {
         if (!level.isClientSide && placer instanceof ServerPlayer player) {
             BlockEntity be = level.getBlockEntity(pos);
             if (be instanceof DetectorBlockEntity d) {
-                d.setOwner(player);
-                UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
-                if (teamId != null) {
-                    d.setOwnerTeamId(teamId);
-                } else {
+                try {
+                    UUID teamId = stack.get(io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents.OWNER_TEAM_ID.get());
+                    if (teamId != null) {
+                        d.setOwnerTeamId(teamId);
+                    } else {
+                        d.setOwnerTeam(player);
+                    }
+                } catch (RuntimeException exception) {
+                    LOGGER.error("Failed to restore detector owner at {}; falling back to placer team", pos, exception);
                     d.setOwnerTeam(player);
                 }
                 d.requestReconnect();

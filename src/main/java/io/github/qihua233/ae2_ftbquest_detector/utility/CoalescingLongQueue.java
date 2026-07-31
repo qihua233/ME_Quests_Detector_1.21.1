@@ -27,13 +27,25 @@ public final class CoalescingLongQueue<K> {
         Objects.requireNonNull(handler, "handler");
 
         int processed = 0;
-        while (processed < limit && !order.isEmpty()) {
+        int attempts = Math.min(limit, order.size());
+        RuntimeException firstFailure = null;
+        for (int attempt = 0; attempt < attempts; attempt++) {
             K key = order.getFirst();
             long value = values.get(key);
-            handler.accept(key, value);
             order.removeFirst();
-            values.remove(key);
-            processed++;
+            try {
+                handler.accept(key, value);
+                values.remove(key);
+                processed++;
+            } catch (RuntimeException exception) {
+                order.addLast(key);
+                if (firstFailure == null) {
+                    firstFailure = exception;
+                }
+            }
+        }
+        if (firstFailure != null) {
+            throw firstFailure;
         }
         return processed;
     }
