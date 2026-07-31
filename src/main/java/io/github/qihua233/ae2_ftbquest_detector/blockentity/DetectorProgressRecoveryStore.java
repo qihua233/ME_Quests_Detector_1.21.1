@@ -13,6 +13,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -73,6 +74,16 @@ final class DetectorProgressRecoveryStore {
         PendingProgressSavedData data = getExisting(server);
         if (data != null) {
             data.discard(teamId);
+        }
+    }
+
+    static void discardTeamsNotIn(MinecraftServer server, Set<UUID> knownTeamIds) {
+        if (server == null || knownTeamIds == null) {
+            return;
+        }
+        PendingProgressSavedData data = getExisting(server);
+        if (data != null) {
+            data.discardTeamsNotIn(knownTeamIds);
         }
     }
 
@@ -144,6 +155,14 @@ final class DetectorProgressRecoveryStore {
         private void discard(UUID teamId) {
             int before = ledger.size();
             ledger.discard(teamId);
+            if (ledger.size() != before) {
+                setDirty();
+            }
+        }
+
+        private void discardTeamsNotIn(Set<UUID> knownTeamIds) {
+            int before = ledger.size();
+            ledger.discardTeamsNotIn(knownTeamIds);
             if (ledger.size() != before) {
                 setDirty();
             }
@@ -235,6 +254,10 @@ final class DetectorProgressRecoveryStore {
 
         synchronized void discard(UUID teamId) {
             values.keySet().removeIf(key -> key.teamId().equals(teamId));
+        }
+
+        synchronized void discardTeamsNotIn(Set<UUID> knownTeamIds) {
+            values.keySet().removeIf(key -> !knownTeamIds.contains(key.teamId()));
         }
 
         synchronized boolean isEmpty() {

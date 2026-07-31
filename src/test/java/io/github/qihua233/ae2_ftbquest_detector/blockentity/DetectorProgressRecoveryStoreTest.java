@@ -3,6 +3,7 @@ package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -51,5 +52,18 @@ class DetectorProgressRecoveryStoreTest {
         ledger.removeIfAtMost(TEAM_ID, 10L, 8L);
 
         assertEquals(0, ledger.copyFor(TEAM_ID).size());
+    }
+
+    @Test
+    void removesEntriesForTeamsThatAreNoLongerKnown() {
+        DetectorProgressRecoveryStore.PendingProgressLedger ledger =
+                new DetectorProgressRecoveryStore.PendingProgressLedger(4);
+
+        ledger.merge(TEAM_ID, 10L, 1L);
+        ledger.merge(OTHER_TEAM_ID, 11L, 1L);
+        ledger.discardTeamsNotIn(Set.of(TEAM_ID));
+
+        assertEquals(1, ledger.copyFor(TEAM_ID).size());
+        assertEquals(0, ledger.copyFor(OTHER_TEAM_ID).size());
     }
 }

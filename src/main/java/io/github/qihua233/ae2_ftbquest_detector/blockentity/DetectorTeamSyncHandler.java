@@ -9,7 +9,10 @@ import dev.ftb.mods.ftbteams.api.event.PlayerLeftPartyTeamEvent;
 import dev.ftb.mods.ftbteams.api.event.PlayerLoggedInAfterTeamEvent;
 import dev.ftb.mods.ftbteams.api.event.TeamEvent;
 import dev.ftb.mods.ftbteams.api.event.TeamManagerEvent;
+import dev.ftb.mods.ftbteams.data.TeamManagerImpl;
+import net.minecraft.server.MinecraftServer;
 
+import java.util.Set;
 import java.util.UUID;
 import org.slf4j.Logger;
 
@@ -26,7 +29,7 @@ public final class DetectorTeamSyncHandler {
         TeamEvent.PLAYER_LEFT_PARTY.register(DetectorTeamSyncHandler::onPlayerLeftParty);
         TeamEvent.PLAYER_LOGGED_IN.register(DetectorTeamSyncHandler::onPlayerLoggedIn);
         TeamEvent.DELETED.register(DetectorTeamSyncHandler::onTeamEvent);
-        TeamManagerEvent.LOADED.register(event -> DetectorEntityList.refreshAllTeamStatuses());
+        TeamManagerEvent.LOADED.register(DetectorTeamSyncHandler::onTeamManagerLoaded);
         ClearFileCacheEvent.EVENT.register(ignored -> DetectorEntityList.markAllTaskCachesDirty());
     }
 
@@ -73,6 +76,39 @@ public final class DetectorTeamSyncHandler {
 
     private static void onTeamEvent(TeamEvent event) {
         refresh(event.getTeam());
+        discardDeletedTeamRecovery(event.getTeam());
+    }
+
+    private static void onTeamManagerLoaded(TeamManagerEvent event) {
+        DetectorEntityList.refreshAllTeamStatuses();
+        try {
+            MinecraftServer server = event.getManager().getServer();
+            if (server != null && TeamManagerImpl.INSTANCE != null) {
+                server.execute(() -> {
+                    TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+                    if (manager != null) {
+                        Set<UUID> knownTeamIds = Set.copyOf(manager.getTeamMap().keySet());
+                        DetectorProgressRecoveryStore.discardTeamsNotIn(server, knownTeamIds);
+                    }
+                });
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to schedule cleanup of detector recovery records after FTB Teams load", exception);
+        }
+    }
+
+    private static void discardDeletedTeamRecovery(Team team) {
+        if (team == null) {
+            return;
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            if (manager != null) {
+                DetectorProgressRecoveryStore.discard(manager.getServer(), team.getId());
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to discard detector recovery records for deleted team {}", team.getId(), exception);
+        }
     }
 
     private static void refresh(Team team) {
