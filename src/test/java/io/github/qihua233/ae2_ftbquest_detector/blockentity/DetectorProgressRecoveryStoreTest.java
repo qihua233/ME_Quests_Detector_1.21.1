@@ -37,4 +37,19 @@ class DetectorProgressRecoveryStoreTest {
                 .filter(progress -> progress.taskId() == 10L).count());
         assertEquals(2, ledger.size());
     }
+
+    @Test
+    void doesNotRemoveARecoveryEntryAheadOfTheCommittedProgress() {
+        DetectorProgressRecoveryStore.PendingProgressLedger ledger =
+                new DetectorProgressRecoveryStore.PendingProgressLedger(4);
+
+        ledger.merge(TEAM_ID, 10L, 8L);
+        ledger.removeIfAtMost(TEAM_ID, 10L, 7L);
+
+        assertEquals(8L, ledger.copyFor(TEAM_ID).getFirst().targetProgress());
+
+        ledger.removeIfAtMost(TEAM_ID, 10L, 8L);
+
+        assertEquals(0, ledger.copyFor(TEAM_ID).size());
+    }
 }

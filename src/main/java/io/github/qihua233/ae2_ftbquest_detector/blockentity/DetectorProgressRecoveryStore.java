@@ -56,6 +56,16 @@ final class DetectorProgressRecoveryStore {
         }
     }
 
+    static void removeIfAtMost(MinecraftServer server, UUID teamId, long taskId, long committedProgress) {
+        if (server == null || teamId == null || taskId <= 0L || committedProgress <= 0L) {
+            return;
+        }
+        PendingProgressSavedData data = getExisting(server);
+        if (data != null) {
+            data.removeIfAtMost(teamId, taskId, committedProgress);
+        }
+    }
+
     static void discard(MinecraftServer server, UUID teamId) {
         if (server == null || teamId == null) {
             return;
@@ -118,6 +128,14 @@ final class DetectorProgressRecoveryStore {
         private void remove(UUID teamId, long taskId) {
             int before = ledger.size();
             ledger.remove(teamId, taskId);
+            if (ledger.size() != before) {
+                setDirty();
+            }
+        }
+
+        private void removeIfAtMost(UUID teamId, long taskId, long committedProgress) {
+            int before = ledger.size();
+            ledger.removeIfAtMost(teamId, taskId, committedProgress);
             if (ledger.size() != before) {
                 setDirty();
             }
@@ -205,6 +223,14 @@ final class DetectorProgressRecoveryStore {
 
         synchronized void remove(UUID teamId, long taskId) {
             values.remove(new PendingKey(teamId, taskId));
+        }
+
+        synchronized void removeIfAtMost(UUID teamId, long taskId, long committedProgress) {
+            PendingKey key = new PendingKey(teamId, taskId);
+            Long targetProgress = values.get(key);
+            if (targetProgress != null && targetProgress <= committedProgress) {
+                values.remove(key);
+            }
         }
 
         synchronized void discard(UUID teamId) {

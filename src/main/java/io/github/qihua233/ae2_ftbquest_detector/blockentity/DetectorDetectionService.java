@@ -24,6 +24,7 @@ import net.minecraft.server.level.ServerLevel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -38,6 +39,7 @@ final class DetectorDetectionService {
     private final Map<AEKey, List<Task>> activeTasksByKey = new ConcurrentHashMap<>();
     private final Map<AEKey, Long> pendingKeyAmounts = new ConcurrentHashMap<>();
     private final CoalescingLongQueue<Task> progressUpdates = new CoalescingLongQueue<>();
+    private final Set<RecoveryKey> recoveryTasksPending = ConcurrentHashMap.newKeySet();
 
     private IStackWatcher stackWatcher;
     private boolean cacheDirty = true;
@@ -126,8 +128,10 @@ final class DetectorDetectionService {
         }
 
         try {
-            progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) ->
-                    DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress));
+            progressUpdates.drain(Integer.MAX_VALUE, (task, targetProgress) -> {
+                DetectorProgressRecoveryStore.retain(server, teamId, task.getId(), targetProgress);
+                recoveryTasksPending.remove(new RecoveryKey(teamId, task.getId()));
+            });
             immediateProgressFlushPending = false;
             nextPartialProgressFlushGameTime = Long.MIN_VALUE;
             return progressUpdates.isEmpty();
@@ -154,6 +158,7 @@ final class DetectorDetectionService {
         }
         if (retained) {
             progressUpdates.clear();
+            recoveryTasksPending.clear();
         }
         stackWatcher = null;
         cachedTasksByKey.clear();
@@ -172,6 +177,7 @@ final class DetectorDetectionService {
         restoreProgressAfterReload(detector);
         if (isOwnerTeamDefinitelyUnavailable(detector)) {
             progressUpdates.clear();
+            recoveryTasksPending.clear();
             immediateProgressFlushPending = false;
             discardRecoveredProgress(detector);
         }
@@ -227,16 +233,20 @@ final class DetectorDetectionService {
         }
 
         boolean[] completedTask = {false};
+        UUID teamId = context.teamData.getTeamId();
+        MinecraftServer server = getServer(detector);
         try (DetectorProgressSyncContext.Scope ignored = DetectorProgressSyncContext.suppressTeamDirtyNotifications()) {
             progressUpdates.drain(MAX_PROGRESS_UPDATES_PER_TICK, (task, targetProgress) -> {
                 long currentProgress = context.teamData.getProgress(task);
                 if (targetProgress <= currentProgress) {
+                    acknowledgeRecoveryProgress(server, teamId, task, currentProgress);
                     return;
                 }
                 if (currentProgress < task.getMaxProgress() && targetProgress >= task.getMaxProgress()) {
                     completedTask[0] = true;
                 }
                 context.teamData.setProgress(task, targetProgress);
+                acknowledgeRecoveryProgress(server, teamId, task, targetProgress);
             });
         } finally {
             if (completedTask[0]) {
@@ -372,6 +382,7 @@ final class DetectorDetectionService {
     private void clearDerivedState() {
         pendingKeyAmounts.clear();
         progressUpdates.clear();
+        recoveryTasksPending.clear();
         immediateProgressFlushPending = false;
         nextPartialProgressFlushGameTime = Long.MIN_VALUE;
     }
@@ -406,6 +417,7 @@ final class DetectorDetectionService {
         TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(teamId);
         if (status == TeamOwnershipValidator.Status.NONE
                 || status == TeamOwnershipValidator.Status.EMPTY) {
+            recoveryTasksPending.removeIf(key -> key.teamId().equals(teamId));
             DetectorProgressRecoveryStore.discard(server, teamId);
             return;
         }
@@ -418,17 +430,19 @@ final class DetectorDetectionService {
             try {
                 Task task = ServerQuestFile.INSTANCE.getTask(pending.taskId());
                 if (task == null || task.consumesResources() || taskKey(task) == null) {
+                    recoveryTasksPending.remove(new RecoveryKey(teamId, pending.taskId()));
                     DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
                     continue;
                 }
                 long targetProgress = Math.min(task.getMaxProgress(), pending.targetProgress());
                 if (targetProgress <= 0L) {
+                    recoveryTasksPending.remove(new RecoveryKey(teamId, pending.taskId()));
                     DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
                     continue;
                 }
+                recoveryTasksPending.add(new RecoveryKey(teamId, pending.taskId()));
                 progressUpdates.offerMax(task, targetProgress);
                 immediateProgressFlushPending = true;
-                DetectorProgressRecoveryStore.remove(server, teamId, pending.taskId());
             } catch (RuntimeException exception) {
                 LOGGER.warn("Failed to restore detector progress for task {} and team {}",
                         pending.taskId(), teamId, exception);
@@ -481,6 +495,18 @@ final class DetectorDetectionService {
         }
     }
 
+    private void acknowledgeRecoveryProgress(MinecraftServer server, UUID teamId, Task task, long committedProgress) {
+        if (!recoveryTasksPending.remove(new RecoveryKey(teamId, task.getId())) || server == null) {
+            return;
+        }
+        try {
+            DetectorProgressRecoveryStore.removeIfAtMost(server, teamId, task.getId(), committedProgress);
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to acknowledge recovered detector progress for task {} and team {}",
+                    task.getId(), teamId, exception);
+        }
+    }
+
     private static MinecraftServer getServer(DetectorBlockEntity detector) {
         if (detector.getLevel() instanceof ServerLevel serverLevel) {
             return serverLevel.getServer();
@@ -505,5 +531,8 @@ final class DetectorDetectionService {
     }
 
     private record DetectionContext(ServerQuestFile file, TeamData teamData, KeyCounter availableStacks) {
+    }
+
+    private record RecoveryKey(UUID teamId, long taskId) {
     }
 }
