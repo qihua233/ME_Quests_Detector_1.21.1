@@ -39,6 +39,10 @@ public final class DetectorTeamSyncHandler {
             Team previousTeam = event.getPreviousTeam().orElse(null);
             if (shouldFollowPlayer(previousTeam, event.getPlayerId())) {
                 DetectorEntityList.reassignTeamDetectors(previousTeam.getId(), currentTeam.getId());
+                if (failedToMoveTeamRecovery(previousTeam, currentTeam)) {
+                    LOGGER.warn("Could not migrate detector recovery progress from team {} to {} yet",
+                            previousTeam.getId(), currentTeam.getId());
+                }
             }
             refresh(previousTeam);
             refresh(currentTeam);
@@ -58,6 +62,10 @@ public final class DetectorTeamSyncHandler {
             if (event.getTeamDeleted() && shouldFollowPlayer(previousTeam, event.getPlayerId())) {
                 Team playerTeam = event.getPlayerTeam();
                 DetectorEntityList.reassignTeamDetectors(previousTeam.getId(), playerTeam.getId());
+                if (failedToMoveTeamRecovery(previousTeam, playerTeam)) {
+                    LOGGER.warn("Could not migrate detector recovery progress from deleted team {} to {} yet",
+                            previousTeam.getId(), playerTeam.getId());
+                }
             }
             refresh(event.getPlayerTeam());
             refresh(event.getTeam());
@@ -77,6 +85,7 @@ public final class DetectorTeamSyncHandler {
     private static void onTeamEvent(TeamEvent event) {
         refresh(event.getTeam());
         discardDeletedTeamRecovery(event.getTeam());
+        discardDeletedTeamMigration(event.getTeam());
     }
 
     private static void onTeamManagerLoaded(TeamManagerEvent event) {
@@ -111,6 +120,21 @@ public final class DetectorTeamSyncHandler {
         }
     }
 
+    private static void discardDeletedTeamMigration(Team team) {
+        if (team == null) {
+            return;
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            if (manager != null) {
+                DetectorTeamMigrationStore.discardTarget(manager.getServer(), team.getId());
+            }
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to discard pending detector migrations targeting deleted team {}",
+                    team.getId(), exception);
+        }
+    }
+
     private static void refresh(Team team) {
         if (team != null) {
             refresh(team.getId());
@@ -119,6 +143,21 @@ public final class DetectorTeamSyncHandler {
 
     private static void refresh(UUID teamId) {
         DetectorEntityList.refreshTeamStatus(teamId);
+    }
+
+    private static boolean failedToMoveTeamRecovery(Team previousTeam, Team currentTeam) {
+        if (previousTeam == null || currentTeam == null) {
+            return false;
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            return manager == null || !DetectorProgressRecoveryStore.moveTeam(
+                    manager.getServer(), previousTeam.getId(), currentTeam.getId());
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Failed to move detector recovery progress from team {} to {}",
+                    previousTeam.getId(), currentTeam.getId(), exception);
+            return true;
+        }
     }
 
     static boolean shouldFollowPlayer(Team previousTeam, UUID playerId) {

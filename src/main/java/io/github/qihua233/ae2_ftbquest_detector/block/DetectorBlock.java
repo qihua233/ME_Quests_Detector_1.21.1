@@ -5,6 +5,7 @@ import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import io.github.qihua233.ae2_ftbquest_detector.network.DetectorOwnerPayload;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
+import io.github.qihua233.ae2_ftbquest_detector.utility.DetectorStatusPolicy;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
@@ -93,32 +94,31 @@ public class DetectorBlock extends Block implements EntityBlock {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
         BlockEntity be = level.getBlockEntity(pos);
-        if (be instanceof DetectorBlockEntity detector && detector.isNetworkConflict()) {
-            Component message = Component.translatable("ae2-ftbquests-detector.detector.network_conflict");
-            serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(
-                    message
-            ));
-            return ItemInteractionResult.SUCCESS;
-        }
         if (be instanceof DetectorBlockEntity detector) {
             TeamOwnershipValidator.Status teamStatus = detector.getOwnerTeamStatus();
-            if (teamStatus == TeamOwnershipValidator.Status.NONE) {
+            DetectorStatusPolicy.State presentation = DetectorStatusPolicy.resolve(
+                    teamStatus, detector.isNetworkConflict(), state.getValue(POWERED));
+            if (presentation == DetectorStatusPolicy.State.NO_OWNER_TEAM) {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.no_owner");
                 serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
                 return ItemInteractionResult.SUCCESS;
             }
-            if (teamStatus == TeamOwnershipValidator.Status.EMPTY
-                    || teamStatus == TeamOwnershipValidator.Status.INVALID) {
+            if (presentation == DetectorStatusPolicy.State.INVALID_OWNER_TEAM) {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.invalid_owner");
                 serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
                 return ItemInteractionResult.SUCCESS;
             }
-            if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+            if (presentation == DetectorStatusPolicy.State.TEMPORARILY_UNAVAILABLE) {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
                 serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
                 return ItemInteractionResult.SUCCESS;
             }
-            if (!state.getValue(POWERED)) {
+            if (presentation == DetectorStatusPolicy.State.NETWORK_CONFLICT) {
+                Component message = Component.translatable("ae2-ftbquests-detector.detector.network_conflict");
+                serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
+                return ItemInteractionResult.SUCCESS;
+            }
+            if (presentation == DetectorStatusPolicy.State.OFFLINE) {
                 Component message = Component.translatable("ae2-ftbquests-detector.detector.uncharged");
                 serverPlayer.connection.send(new ClientboundSetActionBarTextPacket(message));
                 return ItemInteractionResult.SUCCESS;

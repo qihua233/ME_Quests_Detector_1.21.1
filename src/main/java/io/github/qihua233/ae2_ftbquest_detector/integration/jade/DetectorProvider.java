@@ -7,6 +7,7 @@ import com.mojang.logging.LogUtils;
 import io.github.qihua233.ae2_ftbquest_detector.Config;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorBlockEntity;
 import io.github.qihua233.ae2_ftbquest_detector.utility.BoundedExpiringCache;
+import io.github.qihua233.ae2_ftbquest_detector.utility.DetectorStatusPolicy;
 import io.github.qihua233.ae2_ftbquest_detector.utility.FtbRuntime;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamDisplayNameResolver;
 import io.github.qihua233.ae2_ftbquest_detector.utility.TeamOwnershipValidator;
@@ -44,11 +45,7 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
     @Override
     public void appendTooltip(ITooltip tooltip, BlockAccessor accessor, IPluginConfig config) {
         CompoundTag data = accessor.getServerData();
-        if (data.getBoolean("NetworkConflict")) {
-            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.network_conflict"));
-            return;
-        }
-        if (data.getBoolean("EmptyOwnerTeam") || data.getBoolean("InvalidOwnerTeam")) {
+        if (data.getBoolean("InvalidOwnerTeam")) {
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.invalid_owner"));
             return;
         }
@@ -58,6 +55,10 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
         }
         if (data.getBoolean("TemporaryOwnerTeam")) {
             tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.uncharged"));
+            return;
+        }
+        if (data.getBoolean("NetworkConflict")) {
+            tooltip.add(Component.translatable("ae2-ftbquests-detector.detector.network_conflict"));
             return;
         }
         boolean isPowered = accessor.getBlockState().getValue(Objects.requireNonNull(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED));
@@ -102,22 +103,28 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
             return;
         }
         if (accessor.getBlockEntity() instanceof DetectorBlockEntity detector) {
-            if (detector.isNetworkConflict()) {
-                data.putBoolean("NetworkConflict", true);
-                return;
-            }
             TeamOwnershipValidator.Status teamStatus = detector.getOwnerTeamStatus();
-            if (teamStatus == TeamOwnershipValidator.Status.EMPTY
-                    || teamStatus == TeamOwnershipValidator.Status.INVALID) {
+            boolean powered = accessor.getBlockState().getValue(
+                    Objects.requireNonNull(io.github.qihua233.ae2_ftbquest_detector.block.DetectorBlock.POWERED));
+            DetectorStatusPolicy.State presentation = DetectorStatusPolicy.resolve(
+                    teamStatus, detector.isNetworkConflict(), powered);
+            if (presentation == DetectorStatusPolicy.State.INVALID_OWNER_TEAM) {
                 data.putBoolean("InvalidOwnerTeam", true);
                 return;
             }
-            if (teamStatus == TeamOwnershipValidator.Status.NONE) {
+            if (presentation == DetectorStatusPolicy.State.NO_OWNER_TEAM) {
                 data.putBoolean("NoOwnerTeam", true);
                 return;
             }
-            if (teamStatus == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+            if (presentation == DetectorStatusPolicy.State.TEMPORARILY_UNAVAILABLE) {
                 data.putBoolean("TemporaryOwnerTeam", true);
+                return;
+            }
+            if (presentation == DetectorStatusPolicy.State.NETWORK_CONFLICT) {
+                data.putBoolean("NetworkConflict", true);
+                return;
+            }
+            if (presentation == DetectorStatusPolicy.State.OFFLINE) {
                 return;
             }
             if (detector.ownerTeamId != null) {
@@ -128,7 +135,9 @@ public class DetectorProvider implements IBlockComponentProvider, IServerDataPro
                     data.putString("RawTeamName", rawTeamName);
                 }
 
-                if (ServerQuestFile.INSTANCE != null) {
+                if (ServerQuestFile.INSTANCE != null
+                        && DetectorJadeProgressPreferences.shouldCompute(
+                        accessor.getPlayer() == null ? null : accessor.getPlayer().getUUID())) {
                     TeamData teamData = ServerQuestFile.INSTANCE.getNullableTeamData(detector.ownerTeamId);
                     if (teamData != null) {
                         JadeTaskStats stats = computeOrGetCachedTaskStats(ServerQuestFile.INSTANCE, teamData, detector.ownerTeamId);

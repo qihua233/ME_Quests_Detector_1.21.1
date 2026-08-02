@@ -17,16 +17,17 @@ public final class TeamOwnershipValidator {
     public enum Status {
         NONE,
         USABLE,
-        EMPTY,
         INVALID,
         TEMPORARILY_UNAVAILABLE
     }
 
-    private TeamOwnershipValidator() {
+    public enum PersonalTeamStatus {
+        PERSONAL,
+        OTHER,
+        TEMPORARILY_UNAVAILABLE
     }
 
-    public static boolean isUsableTeam(UUID teamId) {
-        return getStatus(teamId) == Status.USABLE;
+    private TeamOwnershipValidator() {
     }
 
     public static Status getStatus(UUID teamId) {
@@ -71,6 +72,25 @@ public final class TeamOwnershipValidator {
         } catch (RuntimeException exception) {
             logTransientFailure(persistedTeamId, exception);
             return persistedTeamId;
+        }
+    }
+
+    public static PersonalTeamStatus getPersonalTeamStatus(UUID teamId) {
+        if (teamId == null) {
+            return PersonalTeamStatus.OTHER;
+        }
+        try {
+            TeamManagerImpl manager = TeamManagerImpl.INSTANCE;
+            if (manager == null) {
+                return PersonalTeamStatus.TEMPORARILY_UNAVAILABLE;
+            }
+            Team personalTeam = manager.getPersonalTeamForPlayerID(teamId);
+            return personalTeam != null && teamId.equals(personalTeam.getId())
+                    ? PersonalTeamStatus.PERSONAL
+                    : PersonalTeamStatus.OTHER;
+        } catch (RuntimeException exception) {
+            logTransientFailure(teamId, exception);
+            return PersonalTeamStatus.TEMPORARILY_UNAVAILABLE;
         }
     }
 

@@ -55,6 +55,30 @@ class DetectorProgressRecoveryStoreTest {
     }
 
     @Test
+    void replacesAClampedRecoveryTargetBeforeAcknowledgement() {
+        DetectorProgressRecoveryStore.PendingProgressLedger ledger =
+                new DetectorProgressRecoveryStore.PendingProgressLedger(4);
+
+        ledger.merge(TEAM_ID, 10L, 100L);
+        ledger.replace(TEAM_ID, 10L, 50L);
+        ledger.removeIfAtMost(TEAM_ID, 10L, 50L);
+
+        assertEquals(0, ledger.copyFor(TEAM_ID).size());
+    }
+
+    @Test
+    void movesAllPendingProgressWhenAPlayerTeamJoinsAParty() {
+        DetectorProgressRecoveryStore.PendingProgressLedger ledger =
+                new DetectorProgressRecoveryStore.PendingProgressLedger(4);
+
+        ledger.merge(TEAM_ID, 10L, 8L);
+        ledger.moveTeam(TEAM_ID, OTHER_TEAM_ID);
+
+        assertEquals(0, ledger.copyFor(TEAM_ID).size());
+        assertEquals(8L, ledger.copyFor(OTHER_TEAM_ID).getFirst().targetProgress());
+    }
+
+    @Test
     void removesEntriesForTeamsThatAreNoLongerKnown() {
         DetectorProgressRecoveryStore.PendingProgressLedger ledger =
                 new DetectorProgressRecoveryStore.PendingProgressLedger(4);

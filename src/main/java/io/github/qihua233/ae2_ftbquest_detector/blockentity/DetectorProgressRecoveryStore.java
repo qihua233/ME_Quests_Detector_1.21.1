@@ -1,5 +1,6 @@
 package io.github.qihua233.ae2_ftbquest_detector.blockentity;
 
+import com.mojang.logging.LogUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -7,14 +8,19 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
+import org.jetbrains.annotations.NotNull;
+import org.slf4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Keeps detector progress that could not be written before a chunk unload.
@@ -23,37 +29,60 @@ import java.util.UUID;
 final class DetectorProgressRecoveryStore {
     static final int MAX_PENDING_ENTRIES = 8192;
     private static final String DATA_ID = "ae2_ftbquest_detector_progress";
+    private static final long FALLBACK_LOG_INTERVAL_MS = 30_000L;
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final AtomicLong LAST_FALLBACK_LOG_MS = new AtomicLong(Long.MIN_VALUE);
     private static final SavedData.Factory<PendingProgressSavedData> FACTORY =
             new SavedData.Factory<>(PendingProgressSavedData::new, PendingProgressSavedData::load);
+    private static final Map<MinecraftServer, PendingProgressLedger> VOLATILE_FALLBACK =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private DetectorProgressRecoveryStore() {
     }
 
-    static void retain(MinecraftServer server, UUID teamId, long taskId, long targetProgress) {
+    static boolean retain(MinecraftServer server, UUID teamId, long taskId, long targetProgress) {
         if (server == null || teamId == null || taskId <= 0L || targetProgress <= 0L) {
-            return;
+            return false;
         }
-        PendingProgressSavedData data = getOrCreate(server);
-        if (data != null) {
+        try {
+            PendingProgressSavedData data = getOrCreate(server);
+            promoteVolatileFallback(server, data);
             data.merge(teamId, taskId, targetProgress);
+            return true;
+        } catch (RuntimeException exception) {
+            logFallback(server, exception);
         }
+        retainVolatileFallback(server, teamId, taskId, targetProgress);
+        logFallback(server, null);
+        return true;
     }
 
     static List<PendingProgress> copyFor(MinecraftServer server, UUID teamId) {
         if (server == null || teamId == null) {
             return List.of();
         }
-        PendingProgressSavedData data = getExisting(server);
-        return data == null ? List.of() : data.copyFor(teamId);
+        PendingProgressSavedData data = tryGetExisting(server);
+        if (data != null) {
+            promoteVolatileFallback(server, data);
+            return data.copyFor(teamId);
+        }
+        PendingProgressLedger fallback = getVolatileFallback(server, false);
+        return fallback == null ? List.of() : fallback.copyFor(teamId);
     }
 
     static void remove(MinecraftServer server, UUID teamId, long taskId) {
         if (server == null || teamId == null || taskId <= 0L) {
             return;
         }
-        PendingProgressSavedData data = getExisting(server);
+        PendingProgressSavedData data = tryGetExisting(server);
         if (data != null) {
+            promoteVolatileFallback(server, data);
             data.remove(teamId, taskId);
+        } else {
+            PendingProgressLedger fallback = getVolatileFallback(server, false);
+            if (fallback != null) {
+                fallback.remove(teamId, taskId);
+            }
         }
     }
 
@@ -61,19 +90,70 @@ final class DetectorProgressRecoveryStore {
         if (server == null || teamId == null || taskId <= 0L || committedProgress <= 0L) {
             return;
         }
-        PendingProgressSavedData data = getExisting(server);
+        PendingProgressSavedData data = tryGetExisting(server);
         if (data != null) {
+            promoteVolatileFallback(server, data);
             data.removeIfAtMost(teamId, taskId, committedProgress);
+        } else {
+            PendingProgressLedger fallback = getVolatileFallback(server, false);
+            if (fallback != null) {
+                fallback.removeIfAtMost(teamId, taskId, committedProgress);
+            }
         }
+    }
+
+    static boolean replace(MinecraftServer server, UUID teamId, long taskId, long targetProgress) {
+        if (server == null || teamId == null || taskId <= 0L || targetProgress <= 0L) {
+            return false;
+        }
+        try {
+            PendingProgressSavedData data = getOrCreate(server);
+            promoteVolatileFallback(server, data);
+            data.replace(teamId, taskId, targetProgress);
+            return true;
+        } catch (RuntimeException exception) {
+            logFallback(server, exception);
+        }
+        PendingProgressLedger fallback = getVolatileFallback(server, true);
+        fallback.replace(teamId, taskId, targetProgress);
+        logFallback(server, null);
+        return true;
+    }
+
+    static boolean moveTeam(MinecraftServer server, UUID previousTeamId, UUID newTeamId) {
+        if (server == null || previousTeamId == null || newTeamId == null
+                || previousTeamId.equals(newTeamId)) {
+            return false;
+        }
+        try {
+            PendingProgressSavedData data = getOrCreate(server);
+            promoteVolatileFallback(server, data);
+            data.moveTeam(previousTeamId, newTeamId);
+            return true;
+        } catch (RuntimeException exception) {
+            logFallback(server, exception);
+        }
+        PendingProgressLedger fallback = getVolatileFallback(server, false);
+        if (fallback != null) {
+            fallback.moveTeam(previousTeamId, newTeamId);
+            return true;
+        }
+        return false;
     }
 
     static void discard(MinecraftServer server, UUID teamId) {
         if (server == null || teamId == null) {
             return;
         }
-        PendingProgressSavedData data = getExisting(server);
+        PendingProgressSavedData data = tryGetExisting(server);
         if (data != null) {
+            promoteVolatileFallback(server, data);
             data.discard(teamId);
+        } else {
+            PendingProgressLedger fallback = getVolatileFallback(server, false);
+            if (fallback != null) {
+                fallback.discard(teamId);
+            }
         }
     }
 
@@ -81,26 +161,83 @@ final class DetectorProgressRecoveryStore {
         if (server == null || knownTeamIds == null) {
             return;
         }
-        PendingProgressSavedData data = getExisting(server);
+        PendingProgressSavedData data = tryGetExisting(server);
         if (data != null) {
+            promoteVolatileFallback(server, data);
             data.discardTeamsNotIn(knownTeamIds);
+        } else {
+            PendingProgressLedger fallback = getVolatileFallback(server, false);
+            if (fallback != null) {
+                fallback.discardTeamsNotIn(knownTeamIds);
+            }
         }
     }
 
     private static PendingProgressSavedData getOrCreate(MinecraftServer server) {
         ServerLevel overworld = server.overworld();
-        if (overworld == null) {
-            return null;
-        }
         return overworld.getDataStorage().computeIfAbsent(FACTORY, DATA_ID);
     }
 
     private static PendingProgressSavedData getExisting(MinecraftServer server) {
         ServerLevel overworld = server.overworld();
-        if (overworld == null) {
+        return overworld.getDataStorage().get(FACTORY, DATA_ID);
+    }
+
+    private static PendingProgressSavedData tryGetExisting(MinecraftServer server) {
+        try {
+            return getExisting(server);
+        } catch (RuntimeException exception) {
+            logFallback(server, exception);
             return null;
         }
-        return overworld.getDataStorage().get(FACTORY, DATA_ID);
+    }
+
+    private static void retainVolatileFallback(
+            MinecraftServer server, UUID teamId, long taskId, long targetProgress) {
+        getVolatileFallback(server, true).merge(teamId, taskId, targetProgress);
+    }
+
+    private static PendingProgressLedger getVolatileFallback(MinecraftServer server, boolean create) {
+        synchronized (VOLATILE_FALLBACK) {
+            if (create) {
+                return VOLATILE_FALLBACK.computeIfAbsent(server, ignored -> new PendingProgressLedger());
+            }
+            return VOLATILE_FALLBACK.get(server);
+        }
+    }
+
+    private static void promoteVolatileFallback(MinecraftServer server, PendingProgressSavedData data) {
+        PendingProgressLedger fallback = getVolatileFallback(server, false);
+        if (fallback == null) {
+            return;
+        }
+        try {
+            for (PendingProgressEntry entry : fallback.snapshot()) {
+                data.merge(entry.teamId(), entry.taskId(), entry.targetProgress());
+            }
+            synchronized (VOLATILE_FALLBACK) {
+                if (VOLATILE_FALLBACK.get(server) == fallback) {
+                    VOLATILE_FALLBACK.remove(server);
+                }
+            }
+        } catch (RuntimeException exception) {
+            logFallback(server, exception);
+        }
+    }
+
+    private static void logFallback(MinecraftServer server, RuntimeException exception) {
+        long now = System.currentTimeMillis();
+        long previous = LAST_FALLBACK_LOG_MS.get();
+        if ((previous == Long.MIN_VALUE || now - previous >= FALLBACK_LOG_INTERVAL_MS)
+                && LAST_FALLBACK_LOG_MS.compareAndSet(previous, now)) {
+            if (exception == null) {
+                LOGGER.warn("Detector progress SavedData is unavailable for {}; retaining progress in the server fallback queue",
+                        server);
+            } else {
+                LOGGER.warn("Failed to access detector progress SavedData for {}; retaining progress in the server fallback queue",
+                        server, exception);
+            }
+        }
     }
 
     record PendingProgress(long taskId, long targetProgress) {
@@ -152,6 +289,19 @@ final class DetectorProgressRecoveryStore {
             }
         }
 
+        private void replace(UUID teamId, long taskId, long targetProgress) {
+            ledger.replace(teamId, taskId, targetProgress);
+            setDirty();
+        }
+
+        private void moveTeam(UUID previousTeamId, UUID newTeamId) {
+            int before = ledger.size();
+            ledger.moveTeam(previousTeamId, newTeamId);
+            if (ledger.size() != before) {
+                setDirty();
+            }
+        }
+
         private void discard(UUID teamId) {
             int before = ledger.size();
             ledger.discard(teamId);
@@ -169,7 +319,8 @@ final class DetectorProgressRecoveryStore {
         }
 
         @Override
-        public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+        public @NotNull CompoundTag save(@NotNull CompoundTag tag,
+                                         @NotNull HolderLookup.Provider registries) {
             ListTag entries = new ListTag();
             for (PendingProgressEntry entry : ledger.snapshot()) {
                 CompoundTag value = new CompoundTag();
@@ -252,16 +403,46 @@ final class DetectorProgressRecoveryStore {
             }
         }
 
+        synchronized void replace(UUID teamId, long taskId, long targetProgress) {
+            PendingKey key = new PendingKey(teamId, taskId);
+            if (!values.containsKey(key)) {
+                while (values.size() >= maxEntries) {
+                    Iterator<PendingKey> iterator = values.keySet().iterator();
+                    if (!iterator.hasNext()) {
+                        break;
+                    }
+                    iterator.next();
+                    iterator.remove();
+                }
+            }
+            values.put(key, targetProgress);
+        }
+
+        synchronized void moveTeam(UUID previousTeamId, UUID newTeamId) {
+            List<PendingProgressEntry> pending = new ArrayList<>();
+            for (Map.Entry<PendingKey, Long> entry : values.entrySet()) {
+                if (entry.getKey().teamId().equals(previousTeamId)) {
+                    pending.add(new PendingProgressEntry(
+                            entry.getKey().teamId(), entry.getKey().taskId(), entry.getValue()));
+                }
+            }
+            for (PendingProgressEntry entry : pending) {
+                PendingKey previousKey = new PendingKey(previousTeamId, entry.taskId());
+                PendingKey newKey = new PendingKey(newTeamId, entry.taskId());
+                Long existing = values.get(newKey);
+                if (existing == null || entry.targetProgress() > existing) {
+                    values.put(newKey, entry.targetProgress());
+                }
+                values.remove(previousKey);
+            }
+        }
+
         synchronized void discard(UUID teamId) {
             values.keySet().removeIf(key -> key.teamId().equals(teamId));
         }
 
         synchronized void discardTeamsNotIn(Set<UUID> knownTeamIds) {
             values.keySet().removeIf(key -> !knownTeamIds.contains(key.teamId()));
-        }
-
-        synchronized boolean isEmpty() {
-            return values.isEmpty();
         }
 
         synchronized int size() {

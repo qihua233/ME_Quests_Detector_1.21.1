@@ -40,11 +40,11 @@ public class Config {
 
         SERVER_JADE_TASK_PROGRESS_IGNORE_HIDDEN_TASKS = SERVER_BUILDER
                 .comment("Exclude tasks from hidden FTB Quests quests from Jade completed/total counts")
-                .define("ignoreHiddenTasks", false);
+                .define("ignoreHiddenTasks", true);
 
         SERVER_JADE_TASK_PROGRESS_IGNORE_REPEATABLE_TASKS = SERVER_BUILDER
                 .comment("Exclude tasks from repeatable FTB Quests quests from Jade completed/total counts")
-                .define("ignoreRepeatableTasks", false);
+                .define("ignoreRepeatableTasks", true);
 
         SERVER_BUILDER.pop();
     }

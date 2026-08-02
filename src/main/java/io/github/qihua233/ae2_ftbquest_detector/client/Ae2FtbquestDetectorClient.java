@@ -11,6 +11,7 @@ public final class Ae2FtbquestDetectorClient {
 
     public Ae2FtbquestDetectorClient(ModContainer modContainer) {
         // Keep client GUI registration out of the shared mod entrypoint.
+        DetectorClientPreferencesSync.register();
         modContainer.registerExtensionPoint(IConfigScreenFactory.class,
                 (container, parent) -> DetectorConfigScreen.create(parent));
     }

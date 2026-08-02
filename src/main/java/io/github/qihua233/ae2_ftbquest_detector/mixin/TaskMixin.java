@@ -3,6 +3,7 @@ package io.github.qihua233.ae2_ftbquest_detector.mixin;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.FluidTask;
 import dev.ftb.mods.ftbquests.quest.task.Task;
+import io.github.qihua233.ae2_ftbquest_detector.utility.QuestTaskEligibility;
 import io.github.qihua233.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -23,11 +24,11 @@ public class TaskMixin {
     private void injectSubmitFluidTask(TeamData teamData, ServerPlayer player, ItemStack craftedItem, CallbackInfo ci) {
         Task thisTask = (Task) (Object) this;
         if(thisTask instanceof FluidTask self
-                && !teamData.isCompleted(self)
+                && QuestTaskEligibility.canSubmit(self, teamData)
                 && self.consumesResources()
         )
         {
-            SubmitHelper.submitTask(teamData, player, self);
+            SubmitHelper.submitTask(teamData, player, self, craftedItem);
         }
     }
 

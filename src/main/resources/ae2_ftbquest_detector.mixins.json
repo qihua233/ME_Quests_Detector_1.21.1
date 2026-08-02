@@ -7,6 +7,7 @@
   "mixins": [
     "FluidTaskMixin",
     "ItemTaskMixin",
+    "ItemTaskAccessor",
     "TaskMixin",
     "TeamDataMixin"
   ],

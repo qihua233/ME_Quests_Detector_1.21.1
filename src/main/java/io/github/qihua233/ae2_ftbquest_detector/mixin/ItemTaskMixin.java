@@ -1,7 +1,7 @@
 package io.github.qihua233.ae2_ftbquest_detector.mixin;
-import dev.ftb.mods.ftbquests.item.MissingItem;
 import dev.ftb.mods.ftbquests.quest.TeamData;
 import dev.ftb.mods.ftbquests.quest.task.ItemTask;
+import io.github.qihua233.ae2_ftbquest_detector.utility.QuestTaskEligibility;
 import io.github.qihua233.ae2_ftbquest_detector.utility.SubmitHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -21,13 +21,11 @@ public class ItemTaskMixin {
     private void injectSubmitItemTask(TeamData teamData, ServerPlayer player, ItemStack craftedItem, CallbackInfo ci) {
 
         ItemTask self = (ItemTask) (Object) this;
-        if(self.consumesResources()
-                && !teamData.isCompleted(self)
-                && !self.isTaskScreenOnly()
-                && !(self.getItemStack().getItem() instanceof MissingItem)
+        if (self.consumesResources()
+                && QuestTaskEligibility.canSubmit(self, teamData)
         )
         {
-            SubmitHelper.submitTask(teamData, player, self);
+            SubmitHelper.submitTask(teamData, player, self, craftedItem);
 
         }
 

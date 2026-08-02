@@ -15,6 +15,10 @@ public final class DetectorNetwork {
                 .playToClient(
                         DetectorOwnerPayload.TYPE,
                         DetectorOwnerPayload.STREAM_CODEC,
-                        DetectorOwnerPayload::handle);
+                        DetectorOwnerPayload::handle)
+                .playToServer(
+                        DetectorClientPreferencesPayload.TYPE,
+                        DetectorClientPreferencesPayload.STREAM_CODEC,
+                        DetectorClientPreferencesPayload::handle);
     }
 }

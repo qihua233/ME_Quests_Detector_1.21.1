@@ -16,12 +16,16 @@ public final class DetectorConfigScreen {
     public static Screen create(Screen parent) {
         boolean serverConfigLoaded = Config.SERVER_SPEC.isLoaded();
         var singleplayerServer = Minecraft.getInstance().getSingleplayerServer();
+        boolean hasLocalServerContext = singleplayerServer != null;
         boolean canEditServerConfig = singleplayerServer != null && !singleplayerServer.isPublished();
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("ae2_ftbquest_detector.configuration.title"))
                 .setDoesConfirmSave(true)
-                .setSavingRunnable(() -> Config.saveConfigs(canEditServerConfig));
+                .setSavingRunnable(() -> {
+                    Config.saveConfigs(canEditServerConfig);
+                    DetectorClientPreferencesSync.sendCurrent();
+                });
         ConfigEntryBuilder entries = builder.entryBuilder();
         ConfigCategory client = builder.getOrCreateCategory(
                 Component.translatable("ae2_ftbquest_detector.configuration.category.client"));
@@ -53,11 +57,11 @@ public final class DetectorConfigScreen {
                 .setSaveConsumer(Config.CLIENT_TEAM_NAME_DISPLAY_MODE::set)
                 .build());
 
-        if (serverConfigLoaded) {
+        if (serverConfigLoaded && hasLocalServerContext) {
             var ignoreHiddenEntry = entries.startBooleanToggle(
                             Component.translatable("ae2_ftbquest_detector.configuration.jadeTaskProgressIgnoreHiddenTasks"),
                             Config.SERVER_JADE_TASK_PROGRESS_IGNORE_HIDDEN_TASKS.get())
-                    .setDefaultValue(false)
+                    .setDefaultValue(true)
                     .setTooltip(Component.translatable(
                             "ae2_ftbquest_detector.configuration.jadeTaskProgressIgnoreHiddenTasks.tooltip"))
                     .setSaveConsumer(Config.SERVER_JADE_TASK_PROGRESS_IGNORE_HIDDEN_TASKS::set)
@@ -68,13 +72,16 @@ public final class DetectorConfigScreen {
             var ignoreRepeatableEntry = entries.startBooleanToggle(
                             Component.translatable("ae2_ftbquest_detector.configuration.jadeTaskProgressIgnoreRepeatableTasks"),
                             Config.SERVER_JADE_TASK_PROGRESS_IGNORE_REPEATABLE_TASKS.get())
-                    .setDefaultValue(false)
+                    .setDefaultValue(true)
                     .setTooltip(Component.translatable(
                             "ae2_ftbquest_detector.configuration.jadeTaskProgressIgnoreRepeatableTasks.tooltip"))
                     .setSaveConsumer(Config.SERVER_JADE_TASK_PROGRESS_IGNORE_REPEATABLE_TASKS::set)
                     .build();
             ignoreRepeatableEntry.setEditable(canEditServerConfig);
             server.addEntry(ignoreRepeatableEntry);
+        } else if (serverConfigLoaded) {
+            server.addEntry(entries.startTextDescription(Component.translatable(
+                    "ae2_ftbquest_detector.configuration.serverManaged")).build());
         } else {
             server.addEntry(entries.startTextDescription(Component.translatable(
                     "ae2_ftbquest_detector.configuration.serverUnavailable")).build());

@@ -20,6 +20,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.state.BlockState;
@@ -45,6 +47,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     /** 同一 ME 网络存在多个检测器时停止工作。 */
     private boolean networkConflict = false;
     private boolean lifecycleLoaded;
+    private boolean chunkUnloadPendingRemoval;
+    private MinecraftServer serverContext;
+    private String dimensionContext;
     private int teamValidationRetryTicks;
     private boolean delayedTeamRevalidation;
     private UUID pendingOwnerTeamId;
@@ -132,13 +137,14 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (this.isRemoved() || this.level == null) {
             return;
         }
+        rememberServerContext();
         if (pendingOwnerTeamRetryTicks > 0 && --pendingOwnerTeamRetryTicks == 0
                 && pendingOwnerTeamId != null) {
-            assignOwnerTeam(pendingOwnerTeamId);
+            attemptPendingOwnerMigration();
         }
         if (teamValidationRetryTicks > 0 && --teamValidationRetryTicks == 0) {
             delayedTeamRevalidation = false;
-            reconcileOwnerTeam();
+            attemptOwnerTeamReconciliation();
             requestConflictAndBlockStateRefresh();
         }
         try {
@@ -168,7 +174,13 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
     }
 
     void onOwnerTeamStatusChanged() {
-        detectionService.markActiveCacheDirty();
+        TeamOwnershipValidator.Status status = getOwnerTeamStatus();
+        if (status == TeamOwnershipValidator.Status.NONE
+                || status == TeamOwnershipValidator.Status.INVALID) {
+            detectionService.discardPendingProgress(this);
+        } else {
+            detectionService.markActiveCacheDirty();
+        }
         delayedTeamRevalidation = true;
         teamValidationRetryTicks = 20;
         requestConflictAndBlockStateRefresh();
@@ -192,6 +204,13 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         if (previousTeamId != null && !detectionService.persistPendingProgress(this, previousTeamId)) {
             pendingOwnerTeamId = newTeamId;
             pendingOwnerTeamRetryTicks = 20;
+            persistPendingOwnerMigration(newTeamId, "team change");
+            return;
+        }
+        if (!movePendingPersonalTeamRecovery(previousTeamId, newTeamId)) {
+            pendingOwnerTeamId = newTeamId;
+            pendingOwnerTeamRetryTicks = 20;
+            persistPendingOwnerMigration(newTeamId, "team change");
             return;
         }
         String resolvedTeamName = TeamDisplayNameResolver.resolveRawTeamName(newTeamId, null);
@@ -199,6 +218,7 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         ownerTeamNameCache = resolvedTeamName;
         pendingOwnerTeamId = null;
         pendingOwnerTeamRetryTicks = 0;
+        DetectorTeamMigrationStore.remove(this);
         shortNameWarnedPlayers.clear();
         detectionService.markCacheDirty();
         DetectorEntityList.notifyOwnerTeamIdChanged(this, previousTeamId);
@@ -213,10 +233,35 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         }
     }
 
+    private boolean movePendingPersonalTeamRecovery(UUID previousTeamId, UUID newTeamId) {
+        TeamOwnershipValidator.PersonalTeamStatus personalStatus =
+                TeamOwnershipValidator.getPersonalTeamStatus(previousTeamId);
+        if (personalStatus == TeamOwnershipValidator.PersonalTeamStatus.OTHER) {
+            return true;
+        }
+        if (personalStatus == TeamOwnershipValidator.PersonalTeamStatus.TEMPORARILY_UNAVAILABLE) {
+            return false;
+        }
+        MinecraftServer server = resolveServerContext();
+        return DetectorProgressRecoveryStore.moveTeam(server, previousTeamId, newTeamId);
+    }
+
+    private void persistPendingOwnerMigration(UUID targetTeamId, String reason) {
+        if (DetectorTeamMigrationStore.retain(this, targetTeamId)) {
+            return;
+        }
+        LOGGER.warn("Could not persist pending detector team migration at {} ({})", getBlockPos(), reason);
+    }
+
     @Override
     public void onReady() {
+        rememberServerContext();
+        chunkUnloadPendingRemoval = false;
         stateRefreshQueue.activate();
-        reconcileOwnerTeam();
+        restorePendingOwnerMigration();
+        if (pendingOwnerTeamId == null) {
+            attemptOwnerTeamReconciliation();
+        }
         detectionService.onLoaded(this);
         super.onReady();
         lifecycleLoaded = true;
@@ -229,13 +274,19 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
 
     @Override
     public void onChunkUnloaded() {
+        chunkUnloadPendingRemoval = true;
         unloadDetector();
         super.onChunkUnloaded();
     }
 
     @Override
     public void setRemoved() {
+        boolean preservePendingMigration = chunkUnloadPendingRemoval;
+        chunkUnloadPendingRemoval = false;
         unloadDetector();
+        if (!preservePendingMigration) {
+            DetectorTeamMigrationStore.remove(this);
+        }
         super.setRemoved();
     }
 
@@ -307,6 +358,9 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         lifecycleLoaded = false;
         teamValidationRetryTicks = 0;
         delayedTeamRevalidation = false;
+        if (pendingOwnerTeamId != null) {
+            persistPendingOwnerMigration(pendingOwnerTeamId, "unload");
+        }
         pendingOwnerTeamId = null;
         pendingOwnerTeamRetryTicks = 0;
         stateRefreshQueue.deactivate();
@@ -315,6 +369,92 @@ public class DetectorBlockEntity extends AENetworkedBlockEntity implements IStor
         shortNameWarnedPlayers.clear();
         IGrid previousGrid = DetectorEntityList.unregister(this);
         requestGridPeersRefresh(previousGrid);
+    }
+
+    private void restorePendingOwnerMigration() {
+        try {
+            UUID persistedTarget = DetectorTeamMigrationStore.get(this);
+            if (persistedTarget == null) {
+                return;
+            }
+            pendingOwnerTeamId = persistedTarget;
+            pendingOwnerTeamRetryTicks = 0;
+            attemptPendingOwnerMigration();
+        } catch (RuntimeException exception) {
+            pendingOwnerTeamRetryTicks = 20;
+            LOGGER.warn("Failed to restore detector team migration at {}; retrying", getBlockPos(), exception);
+            requestConflictAndBlockStateRefresh();
+        }
+    }
+
+    private void attemptPendingOwnerMigration() {
+        try {
+            retryPendingOwnerMigration();
+        } catch (RuntimeException exception) {
+            pendingOwnerTeamRetryTicks = 20;
+            LOGGER.warn("Failed to retry detector team migration at {}; retrying", getBlockPos(), exception);
+            requestConflictAndBlockStateRefresh();
+        }
+    }
+
+    private void attemptOwnerTeamReconciliation() {
+        try {
+            reconcileOwnerTeam();
+        } catch (RuntimeException exception) {
+            delayedTeamRevalidation = true;
+            teamValidationRetryTicks = 20;
+            LOGGER.warn("Failed to reconcile detector owner team at {}; retrying", getBlockPos(), exception);
+        }
+    }
+
+    private void retryPendingOwnerMigration() {
+        UUID targetTeamId = pendingOwnerTeamId;
+        if (targetTeamId == null) {
+            return;
+        }
+        TeamOwnershipValidator.Status status = TeamOwnershipValidator.getStatus(targetTeamId);
+        if (status == TeamOwnershipValidator.Status.TEMPORARILY_UNAVAILABLE) {
+            pendingOwnerTeamRetryTicks = 20;
+            return;
+        }
+        if (status == TeamOwnershipValidator.Status.NONE
+                || status == TeamOwnershipValidator.Status.INVALID) {
+            pendingOwnerTeamId = null;
+            pendingOwnerTeamRetryTicks = 0;
+            DetectorTeamMigrationStore.remove(this);
+            requestConflictAndBlockStateRefresh();
+            return;
+        }
+        if (Objects.equals(ownerTeamId, targetTeamId)) {
+            pendingOwnerTeamId = null;
+            pendingOwnerTeamRetryTicks = 0;
+            DetectorTeamMigrationStore.remove(this);
+            return;
+        }
+        assignOwnerTeam(targetTeamId);
+    }
+
+    private void rememberServerContext() {
+        if (level != null) {
+            dimensionContext = level.dimension().location().toString();
+            if (level instanceof ServerLevel serverLevel) {
+                serverContext = serverLevel.getServer();
+            }
+        }
+    }
+
+    private MinecraftServer resolveServerContext() {
+        rememberServerContext();
+        return serverContext;
+    }
+
+    MinecraftServer getServerContext() {
+        return resolveServerContext();
+    }
+
+    String getDimensionContext() {
+        rememberServerContext();
+        return dimensionContext;
     }
 
     private void requestGridPeersRefresh(IGrid grid) {
