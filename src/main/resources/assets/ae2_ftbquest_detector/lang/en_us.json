@@ -37,5 +37,7 @@
   "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_ONLY": "Name only",
   "ae2_ftbquest_detector.configuration.teamNameDisplayMode.SHORT_ID_ONLY": "Short id only",
   "ae2-ftbquests-detector.jade.tasks": "Tasks: %d / %d",
-  "config.jade.plugin_ae2_ftbquest_detector.detector": "Detector Extra Info"
+  "config.jade.plugin_ae2_ftbquest_detector.detector": "Detector Extra Info",
+  "ae2_ftbquest_detector.quest_entry.title": "Scan and complete available checkmark quests.",
+  "ae2_ftbquest_detector.checkmark_sweep.completed": "Completed %s checkmark tasks."
 }

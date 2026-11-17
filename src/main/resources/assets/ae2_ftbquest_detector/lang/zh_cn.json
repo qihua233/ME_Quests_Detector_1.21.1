@@ -37,5 +37,7 @@
   "ae2_ftbquest_detector.configuration.teamNameDisplayMode.NAME_ONLY": "仅队伍名称",
   "ae2_ftbquest_detector.configuration.teamNameDisplayMode.SHORT_ID_ONLY": "仅队伍短 ID",
   "ae2-ftbquests-detector.jade.tasks": "已完成任务：%d / %d",
-  "config.jade.plugin_ae2_ftbquest_detector.detector": "检测器扩展信息"
+  "config.jade.plugin_ae2_ftbquest_detector.detector": "检测器扩展信息",
+  "ae2_ftbquest_detector.quest_entry.title": "扫描并完成可用的检查标记任务。",
+  "ae2_ftbquest_detector.checkmark_sweep.completed": "已完成 %s 个检查标记。"
 }

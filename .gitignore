@@ -5,7 +5,6 @@
 bin/
 _tmp_ftbchunks/
 build/
-gradle/
 run/
 src/generated
 run-data/

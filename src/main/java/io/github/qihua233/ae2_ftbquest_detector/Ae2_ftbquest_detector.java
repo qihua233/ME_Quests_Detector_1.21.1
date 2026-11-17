@@ -7,6 +7,7 @@ import io.github.qihua233.ae2_ftbquest_detector.registry.ModDataComponents;
 import io.github.qihua233.ae2_ftbquest_detector.blockentity.DetectorTeamSyncHandler;
 import io.github.qihua233.ae2_ftbquest_detector.network.DetectorNetwork;
 import io.github.qihua233.ae2_ftbquest_detector.network.DetectorClientPreferenceLifecycle;
+import io.github.qihua233.ae2_ftbquest_detector.quest.CheckmarkSweepService;
 import appeng.api.ids.AECreativeTabIds;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
@@ -38,6 +39,7 @@ public class Ae2_ftbquest_detector {
 
         DetectorTeamSyncHandler.register();
         DetectorClientPreferenceLifecycle.register();
+        CheckmarkSweepService.register();
 
         modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC, "ae2_ftbquest_detector-client.toml");
         modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC, "ae2_ftbquest_detector-server.toml");

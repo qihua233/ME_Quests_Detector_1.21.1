@@ -12,6 +12,7 @@
     "TeamDataMixin"
   ],
   "client": [
+    "client.OtherButtonsPanelBottomMixin"
   ],
   "injectors": {
     "defaultRequire": 1

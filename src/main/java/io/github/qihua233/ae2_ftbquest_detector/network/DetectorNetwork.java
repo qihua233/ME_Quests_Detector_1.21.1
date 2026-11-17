@@ -19,6 +19,10 @@ public final class DetectorNetwork {
                 .playToServer(
                         DetectorClientPreferencesPayload.TYPE,
                         DetectorClientPreferencesPayload.STREAM_CODEC,
-                        DetectorClientPreferencesPayload::handle);
+                        DetectorClientPreferencesPayload::handle)
+                .playToServer(
+                        CheckmarkSweepPayload.TYPE,
+                        CheckmarkSweepPayload.STREAM_CODEC,
+                        CheckmarkSweepPayload::handle);
     }
 }
